@@ -14,14 +14,29 @@
 
 ## 快速开始
 
-### 前置条件
+### 一键启动（Windows）
+
+双击项目根目录下的 `start.bat`，脚本会自动完成：
+
+1. 检测并启动 Docker Desktop
+2. 启动 PostgreSQL 和 Redis
+3. 安装后端依赖（首次）
+4. 执行数据库迁移
+5. 安装前端依赖（首次）
+6. 启动后端（端口 8000）和前端（端口 5173）
+
+启动后访问 `http://localhost:5173` 即可使用，关闭脚本窗口不会停止服务。
+
+### 手动启动
+
+#### 前置条件
 
 - Python 3.10+
 - Node.js 22+
 - PostgreSQL 15+
 - Redis 7+
 
-### 1. 克隆并配置
+#### 1. 克隆并配置
 
 ```bash
 cd api-gateway
@@ -29,13 +44,13 @@ cd api-gateway
 # 编辑 backend/.env 配置数据库连接等
 ```
 
-### 2. 启动基础设施
+#### 2. 启动基础设施
 
 ```bash
 docker-compose up -d postgres redis
 ```
 
-### 3. 初始化数据库
+#### 3. 初始化数据库
 
 ```bash
 cd backend
@@ -43,7 +58,7 @@ pip install -e .
 alembic upgrade head
 ```
 
-### 4. 创建管理员和添加模型
+#### 4. 创建管理员和添加模型
 
 ```bash
 # 创建管理员
@@ -58,14 +73,14 @@ python -m app.cli add-model anthropic claude-sonnet-4-6 "Claude Sonnet 4.6" \
   "https://api.anthropic.com/v1" "sk-ant-your-key" 0.003 0.015 8192
 ```
 
-### 5. 启动后端
+#### 5. 启动后端
 
 ```bash
 cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 6. 启动前端
+#### 6. 启动前端
 
 ```bash
 cd frontend
@@ -121,6 +136,7 @@ api-gateway/
 │   │   └── lib/              # API 客户端、状态管理
 │   └── Dockerfile
 ├── docker-compose.yml
+├── start.bat               # Windows 一键启动脚本
 └── README.md
 ```
 
