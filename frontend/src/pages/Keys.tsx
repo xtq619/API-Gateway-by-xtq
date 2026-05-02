@@ -8,25 +8,41 @@ interface AllowedModel {
   display_name: string;
 }
 
+function StatusDot({ enabled }: { enabled: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full ${enabled ? 'bg-[var(--color-success)] animate-status-pulse' : 'bg-[var(--color-text-dim)]'}`} />
+      <span className={`text-[11px] font-mono tracking-wider ${enabled ? 'text-[var(--color-success)]' : 'text-[var(--color-text-dim)]'}`}>
+        {enabled ? '启用' : '禁用'}
+      </span>
+    </span>
+  );
+}
+
 function TestResult({ data }: { data: any }) {
   if (!data) return null;
   return (
-    <div className={`flex items-center gap-4 text-sm rounded-lg px-4 py-2 ${
-      data.success ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'
+    <div className={`text-[12px] font-mono px-4 py-2 border ${
+      data.success ? 'border-[var(--color-success)]/30' : 'border-[var(--color-danger)]/30'
     }`}>
-      <span className={`font-medium ${data.success ? 'text-green-400' : 'text-red-400'}`}>
-        {data.success ? '连通成功' : '连通失败'}
-      </span>
-      <span className="text-slate-400">模型: <code className="text-slate-300">{data.model}</code></span>
-      <span className="text-slate-400">延迟: <code className="text-slate-300">{data.latency_ms}ms</code></span>
-      {data.success && (
-        <>
-          <span className="text-slate-400">输入: <code className="text-slate-300">{data.tokens?.input}</code></span>
-          <span className="text-slate-400">输出: <code className="text-slate-300">{data.tokens?.output}</code></span>
-        </>
-      )}
-      {data.error_message && (
-        <span className="text-red-400 truncate max-w-md" title={data.error_message}>{data.error_message}</span>
+      <div className="flex items-center gap-4 flex-wrap">
+        <span className={data.success ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}>{data.success ? '成功' : '失败'}</span>
+        <span className="text-[var(--color-text-muted)]">模型: <code className="text-[var(--color-text)]">{data.model}</code></span>
+        <span className="text-[var(--color-text-muted)]">延迟: <code className="text-[var(--color-text)]">{data.latency_ms}ms</code></span>
+        {data.success && (
+          <>
+            <span className="text-[var(--color-text-muted)]">输入: <code className="text-[var(--color-text)]">{data.tokens?.input}</code></span>
+            <span className="text-[var(--color-text-muted)]">输出: <code className="text-[var(--color-text)]">{data.tokens?.output}</code></span>
+          </>
+        )}
+        {data.error_message && (
+          <span className="truncate max-w-md" title={data.error_message}>{data.error_message}</span>
+        )}
+      </div>
+      {data.response_text && (
+        <div className="mt-2 p-2 bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] leading-relaxed max-h-32 overflow-y-auto">
+          {data.response_text}
+        </div>
       )}
     </div>
   );
@@ -34,12 +50,12 @@ function TestResult({ data }: { data: any }) {
 
 function ModelBadges({ models }: { models: AllowedModel[] }) {
   if (!models || models.length === 0) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-indigo-500/10 text-indigo-400">全部模型</span>;
+    return <span className="text-[11px] font-mono text-[var(--color-accent)] tracking-wider">全部模型</span>;
   }
   return (
     <div className="flex flex-wrap gap-1">
       {models.map(m => (
-        <span key={m.id} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-700 text-slate-300">{m.model_name}</span>
+        <span key={m.id} className="text-[11px] font-mono px-2 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)]">{m.model_name}</span>
       ))}
     </div>
   );
@@ -61,6 +77,7 @@ export default function Keys() {
   const [editingKey, setEditingKey] = useState<any>(null);
   const [editAllModels, setEditAllModels] = useState(true);
   const [editSelectedIds, setEditSelectedIds] = useState<string[]>([]);
+  const [testMessages, setTestMessages] = useState<Record<string, string>>({});
 
   const loadKeys = async () => {
     try {
@@ -119,7 +136,8 @@ export default function Keys() {
     setTesting(id);
     setTestResults(prev => ({ ...prev, [id]: null }));
     try {
-      const res = await api.testKey(id);
+      const msg = testMessages[id] || 'Hi';
+      const res = await api.testKey(id, msg);
       const data = await res.json();
       setTestResults(prev => ({ ...prev, [id]: data }));
     } catch {
@@ -157,140 +175,153 @@ export default function Keys() {
     }
   };
 
+  const btnClass = "px-4 py-2 text-[12px] font-mono tracking-wider cursor-pointer border border-[var(--color-border)] transition-colors hover:bg-white hover:text-black hover:border-white";
+  const btnPrimaryClass = "px-4 py-2 text-[12px] font-mono tracking-wider cursor-pointer bg-white text-black border border-white transition-opacity hover:opacity-85";
+  const inputClass = "w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-[13px] font-mono focus:outline-none focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-dim)]";
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-white">API 密钥</h2>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight">API 密钥</h2>
+          <p className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-[0.2em] mt-1">管理密钥</p>
+        </div>
         <button onClick={() => { setShowCreate(true); setNewKey(null); }}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors">
-          <Plus size={16} /> 创建密钥
+          className={btnPrimaryClass}>
+          <span className="flex items-center gap-2"><Plus size={14} /> 创建密钥</span>
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 text-red-400 text-sm">{error}</div>
+        <div className="border border-[var(--color-danger)]/30 px-4 py-3 mb-6 text-[var(--color-danger)] text-[12px] font-mono">{error}</div>
       )}
 
       {newKey && (
-        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
-          <h3 className="text-green-400 font-semibold mb-2">密钥创建成功</h3>
-          <p className="text-sm text-slate-300 mb-3">请立即保存密钥，关闭后无法再次查看！</p>
+        <div className="border border-[var(--color-accent)]/30 px-6 py-5 mb-6 bg-[var(--color-accent-dim)]">
+          <h3 className="font-mono text-[13px] text-[var(--color-accent)] tracking-wider mb-2">密钥已创建</h3>
+          <p className="text-[12px] text-[var(--color-text-muted)] mb-3 font-mono">保存此密钥，关闭后无法再次查看</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-slate-900 px-4 py-2 rounded-lg text-green-400 text-sm break-all">{newKey}</code>
+            <code className="flex-1 bg-[var(--color-bg)] px-4 py-2 text-[var(--color-accent)] text-[13px] font-mono break-all">{newKey}</code>
             <button onClick={() => copyKey(newKey)}
-              className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
-              {copied === newKey ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+              className="p-2 border border-[var(--color-border)] hover:bg-white hover:text-black transition-colors text-[var(--color-text-muted)]">
+              {copied === newKey ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
         </div>
       )}
 
       {showCreate && (
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 mb-6">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6 mb-6">
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-slate-300 mb-1">密钥名称</label>
+                <label className="block font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider mb-1.5">名称</label>
                 <input value={newName} onChange={e => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                  placeholder="例如：生产环境密钥" required />
+                  className={inputClass} placeholder="生产环境密钥" required />
               </div>
               <div>
-                <label className="block text-sm text-slate-300 mb-1">速率限制（次/分钟）</label>
+                <label className="block font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider mb-1.5">速率限制 (RPM)</label>
                 <input type="number" value={newRpm} onChange={e => setNewRpm(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-indigo-500" />
+                  className={inputClass} />
               </div>
             </div>
             <div>
-              <label className="flex items-center gap-2 text-sm text-slate-300 mb-2">
+              <label className="flex items-center gap-2 text-[12px] font-mono text-[var(--color-text-muted)]">
                 <input type="checkbox" checked={allModels} onChange={e => setAllModels(e.target.checked)}
-                  className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500" />
-                允许访问所有模型
+                  className="border-[var(--color-border)] bg-[var(--color-bg)] accent-white" />
+                允许所有模型
               </label>
               {!allModels && models.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-slate-900 rounded-lg border border-slate-600 max-h-40 overflow-y-auto">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-[var(--color-bg)] border border-[var(--color-border)] mt-2 max-h-40 overflow-y-auto">
                   {models.map(m => (
-                    <label key={m.id} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <label key={m.id} className="flex items-center gap-2 text-[11px] font-mono text-[var(--color-text-muted)] cursor-pointer">
                       <input type="checkbox" checked={selectedModelIds.includes(m.id)}
                         onChange={e => {
                           if (e.target.checked) setSelectedModelIds(prev => [...prev, m.id]);
                           else setSelectedModelIds(prev => prev.filter(id => id !== m.id));
                         }}
-                        className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500" />
-                      {m.display_name || m.model_name}
+                        className="border-[var(--color-border)] bg-[var(--color-bg)] accent-white" />
+                      {m.model_name}
                     </label>
                   ))}
                 </div>
               )}
             </div>
             <div className="flex gap-3">
-              <button type="submit" className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm">创建</button>
-              <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm">取消</button>
+              <button type="submit" className={btnPrimaryClass}>创建</button>
+              <button type="button" onClick={() => setShowCreate(false)} className={btnClass}>取消</button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-700/50">
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead className="bg-[var(--color-surface-light)] border-b border-[var(--color-border)]">
             <tr>
-              <th className="text-left p-4 text-slate-300 font-medium">名称</th>
-              <th className="text-left p-4 text-slate-300 font-medium">前缀</th>
-              <th className="text-left p-4 text-slate-300 font-medium">状态</th>
-              <th className="text-left p-4 text-slate-300 font-medium">可用模型</th>
-              <th className="text-left p-4 text-slate-300 font-medium">最后使用</th>
-              <th className="text-right p-4 text-slate-300 font-medium">操作</th>
+              <th className="text-left p-4 font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider font-normal">名称</th>
+              <th className="text-left p-4 font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider font-normal">前缀</th>
+              <th className="text-left p-4 font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider font-normal">状态</th>
+              <th className="text-left p-4 font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider font-normal">模型</th>
+              <th className="text-left p-4 font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider font-normal">最后使用</th>
+              <th className="text-right p-4 font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider font-normal">操作</th>
             </tr>
           </thead>
           <tbody>
             {keys.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500">暂无 API 密钥，点击上方按钮创建</td></tr>
+              <tr><td colSpan={6} className="p-12 text-center text-[var(--color-text-dim)] text-[12px] font-mono">暂无密钥 — 点击上方按钮创建</td></tr>
             )}
             {keys.map(key => (
               <React.Fragment key={key.id}>
-              <tr className="border-t border-slate-700/50">
-                <td className="p-4 text-white">{key.name}</td>
+              <tr className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-light)]/50 transition-colors">
+                <td className="p-4 text-[var(--color-text)]">{key.name}</td>
                 <td className="p-4">
-                  <code className="text-slate-300 text-xs bg-slate-900 px-2 py-1 rounded">sk-{key.key_prefix}...</code>
+                  <code className="text-[12px] font-mono text-[var(--color-text-muted)]">sk-{key.key_prefix}...</code>
                 </td>
-                <td className="p-4">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
-                    key.is_enabled ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                  }`}>{key.is_enabled ? '启用' : '已禁用'}</span>
-                </td>
-                <td className="p-4">
-                  <ModelBadges models={key.allowed_models} />
-                </td>
-                <td className="p-4 text-slate-400 text-xs">
-                  {key.last_used_at ? new Date(key.last_used_at).toLocaleString() : '从未使用'}
+                <td className="p-4"><StatusDot enabled={key.is_enabled} /></td>
+                <td className="p-4"><ModelBadges models={key.allowed_models} /></td>
+                <td className="p-4 text-[var(--color-text-dim)] text-[11px] font-mono">
+                  {key.last_used_at ? new Date(key.last_used_at).toLocaleString() : '—'}
                 </td>
                 <td className="p-4 text-right">
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1.5">
                     <button onClick={() => handleEditModels(key)}
-                      className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
-                      title="模型权限">
-                      <Settings2 size={16} />
+                      className="p-1.5 hover:bg-[var(--color-surface-light)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="模型权限">
+                      <Settings2 size={14} />
                     </button>
                     <button onClick={() => handleTest(key.id)}
                       disabled={testing === key.id}
-                      className="p-1.5 hover:bg-indigo-500/20 rounded text-slate-400 hover:text-indigo-400 disabled:opacity-50"
-                      title="测试密钥">
-                      {testing === key.id ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                      className="p-1.5 hover:bg-[var(--color-surface-light)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent)] disabled:opacity-40" title="测试密钥">
+                      {testing === key.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
                     </button>
-                    <button onClick={() => handleToggle(key.id)} className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
-                      {key.is_enabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                    <button onClick={() => handleToggle(key.id)} className="p-1.5 hover:bg-[var(--color-surface-light)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+                      {key.is_enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                     </button>
-                    <button onClick={() => handleDelete(key.id)} className="p-1.5 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400">
-                      <Trash2 size={16} />
+                    <button onClick={() => handleDelete(key.id)} className="p-1.5 hover:bg-[var(--color-danger)]/10 transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-danger)]">
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>
               </tr>
               {testResults[key.id] && (
-                <tr key={`${key.id}-test`} className="border-t border-slate-700/50">
-                  <td colSpan={6} className="p-4">
+                <tr key={`${key.id}-test`} className="border-t border-[var(--color-border)] bg-[var(--color-surface-light)]/30">
+                  <td colSpan={6} className="p-3">
                     <TestResult data={testResults[key.id]} />
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        value={testMessages[key.id] || ''}
+                        onChange={e => setTestMessages(prev => ({ ...prev, [key.id]: e.target.value }))}
+                        placeholder="输入测试消息 (默认 Hi)..."
+                        className="flex-1 px-2 py-1 bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-[11px] font-mono focus:outline-none focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-dim)]"
+                      />
+                      <button
+                        onClick={() => handleTest(key.id)}
+                        disabled={testing === key.id}
+                        className="px-3 py-1 text-[11px] font-mono tracking-wider bg-white text-black border border-white cursor-pointer hover:opacity-85 disabled:opacity-40 transition-opacity"
+                      >
+                        {testing === key.id ? '...' : '发送'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -301,32 +332,32 @@ export default function Keys() {
       </div>
 
       {editingKey && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setEditingKey(null)}>
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-white mb-4">模型权限 — {editingKey.name}</h3>
-            <label className="flex items-center gap-2 text-sm text-slate-300 mb-3">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setEditingKey(null)}>
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="font-mono text-[13px] text-[var(--color-text)] tracking-wider mb-4">模型权限 — {editingKey.name}</h3>
+            <label className="flex items-center gap-2 text-[12px] font-mono text-[var(--color-text-muted)] mb-3">
               <input type="checkbox" checked={editAllModels} onChange={e => setEditAllModels(e.target.checked)}
-                className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500" />
-              允许访问所有模型
+                className="border-[var(--color-border)] bg-[var(--color-bg)] accent-white" />
+              ALLOW 全部模型
             </label>
             {!editAllModels && (
-              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-900 rounded-lg border border-slate-600 max-h-48 overflow-y-auto mb-4">
+              <div className="grid grid-cols-2 gap-2 p-3 bg-[var(--color-bg)] border border-[var(--color-border)] max-h-48 overflow-y-auto mb-4">
                 {models.map(m => (
-                  <label key={m.id} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                  <label key={m.id} className="flex items-center gap-2 text-[11px] font-mono text-[var(--color-text-muted)] cursor-pointer">
                     <input type="checkbox" checked={editSelectedIds.includes(m.id)}
                       onChange={e => {
                         if (e.target.checked) setEditSelectedIds(prev => [...prev, m.id]);
                         else setEditSelectedIds(prev => prev.filter(id => id !== m.id));
                       }}
-                      className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500" />
-                    {m.display_name || m.model_name}
+                      className="border-[var(--color-border)] bg-[var(--color-bg)] accent-white" />
+                    {m.model_name}
                   </label>
                 ))}
               </div>
             )}
             <div className="flex gap-3 mt-4">
-              <button onClick={handleSaveModels} className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm">保存</button>
-              <button onClick={() => setEditingKey(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm">取消</button>
+              <button onClick={handleSaveModels} className={btnPrimaryClass}>保存</button>
+              <button onClick={() => setEditingKey(null)} className={btnClass}>取消</button>
             </div>
           </div>
         </div>

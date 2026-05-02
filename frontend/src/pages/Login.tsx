@@ -34,42 +34,42 @@ export default function Login() {
     setLoading(false);
   };
 
+  const inputClass = "w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-[13px] font-mono focus:outline-none focus:border-white placeholder:text-[var(--color-text-dim)]";
+
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="bg-slate-800 rounded-2xl p-8 w-full max-w-md border border-slate-700">
-        <h1 className="text-2xl font-bold text-white mb-2">登录</h1>
-        <p className="text-slate-400 mb-6">登录到 API Gateway 管理平台</p>
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-8 w-full max-w-md">
+        <h1 className="font-mono text-lg tracking-wider text-[var(--color-text)] mb-1">API GATEWAY</h1>
+        <p className="text-[var(--color-text-muted)] text-[12px] font-mono mb-8 tracking-wide">登录到管理平台</p>
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+          <div className="border border-[var(--color-danger)]/30 text-[var(--color-danger)] px-4 py-3 mb-6 text-[12px] font-mono">
             {error}
           </div>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-300 mb-1">邮箱</label>
+            <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">邮箱</label>
             <input
               type="email" value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              placeholder="your@example.com" required
+              className={inputClass} placeholder="your@example.com" required
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-300 mb-1">密码</label>
+            <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">密码</label>
             <input
               type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              placeholder="••••••••" required
+              className={inputClass} placeholder="••••••••" required
             />
           </div>
           <button
             type="submit" disabled={loading}
-            className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+            className="w-full py-2.5 bg-white text-black text-[12px] font-mono tracking-wider cursor-pointer border border-white transition-opacity hover:opacity-85 disabled:opacity-40"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? '验证中...' : '登录'}
           </button>
         </form>
-        <p className="text-sm text-slate-400 mt-4 text-center">
-          还没有账号？<Link to="/register" className="text-indigo-400 hover:underline">立即注册</Link>
+        <p className="text-[12px] text-[var(--color-text-muted)] mt-6 text-center font-mono">
+          还没有账号？<Link to="/register" className="text-[var(--color-accent)] hover:underline ml-1">注册</Link>
         </p>
       </div>
     </div>

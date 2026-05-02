@@ -121,7 +121,7 @@ class ProxyService:
         upstream_body["model"] = model.model_name
         upstream_headers = {
             k: v for k, v in request_headers.items()
-            if k.lower() not in ("authorization", "host", "x-api-key")
+            if k.lower() not in ("authorization", "host", "x-api-key", "content-length", "transfer-encoding")
         }
         upstream_headers["authorization"] = f"Bearer {decrypt_api_key(model.api_key_encrypted)}"
 

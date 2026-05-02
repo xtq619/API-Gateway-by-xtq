@@ -39,11 +39,21 @@ app = FastAPI(
 setup_cors(app)
 
 
+import traceback
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    detail = {
+        "code": "INTERNAL_ERROR",
+        "message": "服务器内部错误",
+    }
+    if settings.DEBUG:
+        detail["debug"] = f"{type(exc).__name__}: {exc}"
+        detail["traceback"] = tb
     return JSONResponse(
         status_code=500,
-        content={"detail": {"code": "INTERNAL_ERROR", "message": "服务器内部错误"}},
+        content={"detail": detail},
     )
 
 

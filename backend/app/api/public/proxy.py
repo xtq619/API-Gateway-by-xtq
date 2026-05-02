@@ -81,6 +81,10 @@ async def chat_completions(
             ))
             await err_db.commit()
         raise UpstreamError(str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise
 
     await db.execute(
         update(ApiKey).where(ApiKey.id == api_key.id).values(

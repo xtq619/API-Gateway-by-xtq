@@ -34,7 +34,8 @@ export const api = {
     request('/keys', { method: 'POST', body: JSON.stringify(data) }),
   deleteKey: (id: string) => request(`/keys/${id}`, { method: 'DELETE' }),
   toggleKey: (id: string) => request(`/keys/${id}/toggle`, { method: 'PATCH' }),
-  testKey: (id: string) => request(`/keys/${id}/test`, { method: 'POST' }),
+  testKey: (id: string, message?: string) =>
+    request(`/keys/${id}/test`, { method: 'POST', body: JSON.stringify({ message: message || 'Hi' }) }),
   updateKeyModels: (id: string, model_ids: string[]) =>
     request(`/keys/${id}/models`, { method: 'PUT', body: JSON.stringify({ model_ids }) }),
 

@@ -13,6 +13,7 @@ from app.core.dependencies import get_current_user_id
 from app.core.security import decrypt_api_key, generate_api_key
 from app.models.api_key import ApiKey
 from app.models.model_registry import ModelRegistry
+from app.models.usage_log import UsageLog
 from app.schemas.api_key import ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyResponse, ApiKeyUpdateModels
 
 router = APIRouter(prefix="/keys", tags=["api-keys"])
@@ -126,12 +127,17 @@ class KeyTestResponse(BaseModel):
     tokens: dict
     cost: float
     model: str
+    response_text: str | None = None
     error_message: str | None = None
 
+
+class KeyTestRequest(BaseModel):
+    message: str = "Hi"
 
 @router.post("/{key_id}/test", response_model=KeyTestResponse)
 async def test_key(
     key_id: uuid.UUID,
+    req: KeyTestRequest | None = None,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -155,10 +161,11 @@ async def test_key(
     if not model:
         raise HTTPException(status_code=400, detail="没有可用的模型，请先添加模型")
 
+    test_message = req.message if req else "Hi"
     test_body = {
         "model": model.model_name,
-        "messages": [{"role": "user", "content": "Hi"}],
-        "max_tokens": 5,
+        "messages": [{"role": "user", "content": test_message}],
+        "max_tokens": 50,
         "stream": False,
     }
     headers = {
@@ -176,12 +183,28 @@ async def test_key(
             )
         latency_ms = int((time.time() - start) * 1000)
 
+        # 更新密钥最后使用时间
+        api_key.last_used_at = datetime.now(timezone.utc)
+        await db.flush()
+
         if resp.status_code >= 400:
             error_text = ""
             try:
                 error_text = resp.json().get("error", {}).get("message", resp.text[:200])
             except Exception:
                 error_text = resp.text[:200]
+            db.add(UsageLog(
+                api_key_id=api_key.id,
+                user_id=api_key.user_id,
+                model_id=model.id,
+                request_tokens=0,
+                response_tokens=0,
+                cost=0,
+                latency_ms=latency_ms,
+                status="error",
+                error_message=f"上游返回 {resp.status_code}: {error_text}",
+            ))
+            await db.flush()
             return KeyTestResponse(
                 success=False,
                 latency_ms=latency_ms,
@@ -199,16 +222,45 @@ async def test_key(
         output_cost = (output_tokens / 1000) * float(model.pricing_output) * 1.5
         cost = round(input_cost + output_cost, 6)
 
+        choices = data.get("choices", [])
+        msg = choices[0].get("message", {}) if choices else {}
+        content = msg.get("content") or msg.get("reasoning_content") or ""
+
+        db.add(UsageLog(
+            api_key_id=api_key.id,
+            user_id=api_key.user_id,
+            model_id=model.id,
+            request_tokens=input_tokens,
+            response_tokens=output_tokens,
+            cost=cost,
+            latency_ms=latency_ms,
+            status="success",
+        ))
+        await db.flush()
+
         return KeyTestResponse(
             success=True,
             latency_ms=latency_ms,
             tokens={"input": input_tokens, "output": output_tokens},
             cost=cost,
             model=model.model_name,
+            response_text=content,
         )
 
     except httpx.TimeoutException:
         latency_ms = int((time.time() - start) * 1000)
+        db.add(UsageLog(
+            api_key_id=api_key.id,
+            user_id=api_key.user_id,
+            model_id=model.id,
+            request_tokens=0,
+            response_tokens=0,
+            cost=0,
+            latency_ms=latency_ms,
+            status="error",
+            error_message="请求上游超时",
+        ))
+        await db.flush()
         return KeyTestResponse(
             success=False,
             latency_ms=latency_ms,
@@ -219,6 +271,18 @@ async def test_key(
         )
     except Exception as e:
         latency_ms = int((time.time() - start) * 1000)
+        db.add(UsageLog(
+            api_key_id=api_key.id,
+            user_id=api_key.user_id,
+            model_id=model.id,
+            request_tokens=0,
+            response_tokens=0,
+            cost=0,
+            latency_ms=latency_ms,
+            status="error",
+            error_message=str(e),
+        ))
+        await db.flush()
         return KeyTestResponse(
             success=False,
             latency_ms=latency_ms,
