@@ -84,6 +84,15 @@ export default function Usage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const handleDaysChange = (newDays: number) => {
+    if (newDays === days) return;
+    setDays(newDays);
+    setLogs([]);
+    setStats([]);
+    setSummary(null);
+    setError(null);
+  };
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -115,7 +124,7 @@ export default function Usage() {
         </div>
         <select
           value={days}
-          onChange={e => setDays(Number(e.target.value))}
+          onChange={e => handleDaysChange(Number(e.target.value))}
           className="px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-[12px] font-mono focus:outline-none focus:border-[var(--color-accent)]"
         >
           <option value={1}>24H</option>

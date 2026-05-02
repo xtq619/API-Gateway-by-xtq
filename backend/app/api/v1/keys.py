@@ -8,13 +8,16 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user_id
+from app.core.exceptions import InsufficientBalance
 from app.core.security import decrypt_api_key, generate_api_key
 from app.models.api_key import ApiKey
 from app.models.model_registry import ModelRegistry
 from app.models.usage_log import UsageLog
 from app.schemas.api_key import ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyResponse, ApiKeyUpdateModels
+from app.services.billing_service import deduct_balance, get_balance
 
 router = APIRouter(prefix="/keys", tags=["api-keys"])
 
@@ -161,6 +164,11 @@ async def test_key(
     if not model:
         raise HTTPException(status_code=400, detail="没有可用的模型，请先添加模型")
 
+    if model.pricing_input > 0 or model.pricing_output > 0:
+        balance = await get_balance(db, api_key.user_id)
+        if balance <= 0:
+            raise InsufficientBalance()
+
     test_message = req.message if req else "Hi"
     test_body = {
         "model": model.model_name,
@@ -218,8 +226,8 @@ async def test_key(
         usage = data.get("usage", {})
         input_tokens = usage.get("prompt_tokens", 0)
         output_tokens = usage.get("completion_tokens", 0)
-        input_cost = (input_tokens / 1000) * float(model.pricing_input) * 1.5
-        output_cost = (output_tokens / 1000) * float(model.pricing_output) * 1.5
+        input_cost = (input_tokens / 1000) * float(model.pricing_input) * settings.MARKUP_RATIO
+        output_cost = (output_tokens / 1000) * float(model.pricing_output) * settings.MARKUP_RATIO
         cost = round(input_cost + output_cost, 6)
 
         choices = data.get("choices", [])
@@ -236,6 +244,10 @@ async def test_key(
             latency_ms=latency_ms,
             status="success",
         ))
+
+        if cost > 0:
+            await deduct_balance(db, api_key.user_id, cost, f"API测试：{model.model_name}")
+
         await db.flush()
 
         return KeyTestResponse(
