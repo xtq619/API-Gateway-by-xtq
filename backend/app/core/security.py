@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -10,7 +9,6 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _fernet: Fernet | None = None
@@ -21,19 +19,20 @@ def _get_fernet() -> Fernet:
     if _fernet is not None:
         return _fernet
     key = settings.ENCRYPTION_KEY
+    if len(key) != 44:
+        raise ValueError(
+            "ENCRYPTION_KEY 无效：长度必须为 44 字符。\n"
+            "请在 backend/.env 中设置正确的 ENCRYPTION_KEY。\n"
+            "生成方式: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
     try:
         base64.urlsafe_b64decode(key)
-        if len(key) != 44:
-            raise ValueError("key length is not 44")
     except Exception:
-        generated = Fernet.generate_key().decode()
-        logger.warning(
-            "ENCRYPTION_KEY 无效，已自动生成临时密钥。"
-            "请在生产环境中设置正确的 ENCRYPTION_KEY 环境变量。"
-            "生成密钥: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        raise ValueError(
+            "ENCRYPTION_KEY 无效：不是有效的 base64 编码。\n"
+            "请在 backend/.env 中设置正确的 ENCRYPTION_KEY。\n"
+            "生成方式: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
         )
-        _fernet = Fernet(generated.encode())
-        return _fernet
     _fernet = Fernet(key.encode())
     return _fernet
 

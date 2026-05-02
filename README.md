@@ -41,7 +41,14 @@
 ```bash
 cd api-gateway
 
-# 编辑 backend/.env 配置数据库连接等
+# 复制环境变量模板
+cp backend/.env.example backend/.env
+
+# 生成 Fernet 加密密钥（用于安全存储上游模型的 API Key）
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# 把输出的密钥填入 backend/.env 的 ENCRYPTION_KEY
+
+# 编辑 backend/.env 配置其他参数（数据库连接、JWT 密钥等）
 ```
 
 #### 2. 启动基础设施

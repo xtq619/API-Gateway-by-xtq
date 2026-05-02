@@ -20,6 +20,8 @@ from app.services.rate_limiter import rate_limiter
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.core.security import _get_fernet
+    _get_fernet()  # Validate Fernet key early — crash fast if misconfigured
     await rate_limiter.connect()
     yield
     if rate_limiter.redis:
