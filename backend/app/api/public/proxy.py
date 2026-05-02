@@ -2,10 +2,10 @@
 
 End-users call these with their API Key (Bearer sk-xxx).
 """
-import json
 import time
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
@@ -18,70 +18,12 @@ from app.models.api_key import ApiKey
 from app.models.model_registry import ModelRegistry
 from app.models.usage_log import UsageLog
 from app.services.billing_service import deduct_balance, get_balance
-from app.services.proxy_service import proxy_service
+from app.services.proxy_service import (
+    UsageCollector, proxy_service, record_stream_usage, stream_with_collector,
+)
 from app.services.rate_limiter import rate_limiter
 
 router = APIRouter()
-
-
-class _UsageCollector:
-    def __init__(self):
-        self.usage_info = None
-
-
-async def _handle_stream(response, collector: _UsageCollector):
-    async for chunk in response.aiter_bytes():
-        try:
-            line = chunk.decode(errors="ignore")
-            if "usage" in line:
-                for part in line.split("\n"):
-                    if part.startswith("data: ") and part != "data: [DONE]":
-                        try:
-                            inner = json.loads(part[6:])
-                            if "usage" in inner:
-                                collector.usage_info = inner["usage"]
-                        except json.JSONDecodeError:
-                            pass
-        except Exception:
-            pass
-        yield chunk
-
-
-async def _record_stream_usage(
-    api_key_id, user_id, model_id, collector: _UsageCollector,
-    start_time: float, request_ip: str | None,
-):
-    async with async_session() as db:
-        try:
-            usage_info = collector.usage_info
-            request_tokens = usage_info.get("prompt_tokens", 0) if usage_info else 0
-            response_tokens = usage_info.get("completion_tokens", 0) if usage_info else 0
-            latency_ms = int((time.time() - start_time) * 1000)
-
-            model_result = await db.execute(select(ModelRegistry).where(ModelRegistry.id == model_id))
-            model = model_result.scalar_one_or_none()
-
-            if model:
-                cost = proxy_service._calculate_cost(model, request_tokens, response_tokens)
-                usage_log = UsageLog(
-                    api_key_id=api_key_id,
-                    user_id=user_id,
-                    model_id=model_id,
-                    request_tokens=request_tokens,
-                    response_tokens=response_tokens,
-                    cost=cost,
-                    latency_ms=latency_ms,
-                    status="success",
-                    request_ip=request_ip,
-                )
-                db.add(usage_log)
-
-                if cost > 0:
-                    await deduct_balance(db, user_id, cost, f"API 调用：{model.model_name}")
-
-            await db.commit()
-        except Exception:
-            await db.rollback()
 
 
 @router.post("/chat/completions")
@@ -103,7 +45,9 @@ async def chat_completions(
     start_time = time.time()
 
     result = await db.execute(
-        select(ModelRegistry).where(ModelRegistry.model_name == model_name, ModelRegistry.is_enabled == True)
+        select(ModelRegistry).where(
+            ModelRegistry.model_name == model_name, ModelRegistry.is_enabled == True
+        )
     )
     model = result.scalar_one_or_none()
     if not model:
@@ -120,40 +64,58 @@ async def chat_completions(
             raise InsufficientBalance()
 
     try:
-        resp_body, stream_response, cost = await proxy_service.proxy_chat_completion(
-            db, api_key, model_name, body, dict(request.headers),
-            request_ip=client_ip,
+        resp_body, stream_response, usage_log = await proxy_service.chat_completion(
+            model, body, dict(request.headers), request_ip=client_ip,
         )
-
-        await db.execute(
-            update(ApiKey).where(ApiKey.id == api_key.id).values(last_used_at=datetime.now(timezone.utc))
-        )
-
-        if not is_stream:
-            if cost and cost > 0:
-                deducted = await deduct_balance(db, api_key.user_id, cost, f"API 调用：{model.model_name}")
-                if not deducted:
-                    raise InsufficientBalance()
-            return resp_body
-
-        collector = _UsageCollector()
-        background_tasks.add_task(
-            _record_stream_usage,
-            api_key.id, api_key.user_id, model.id, collector, start_time, client_ip,
-        )
-        return StreamingResponse(
-            _handle_stream(stream_response, collector),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
+    except httpx.HTTPStatusError as e:
+        async with async_session() as err_db:
+            err_db.add(UsageLog(
+                api_key_id=api_key.id,
+                user_id=api_key.user_id,
+                model_id=model.id,
+                request_tokens=0, response_tokens=0, cost=0,
+                latency_ms=int((time.time() - start_time) * 1000),
+                status="error",
+                error_message=f"Upstream {e.response.status_code}",
+                request_ip=client_ip,
+            ))
+            await err_db.commit()
         raise UpstreamError(str(e))
+
+    await db.execute(
+        update(ApiKey).where(ApiKey.id == api_key.id).values(
+            last_used_at=datetime.now(timezone.utc)
+        )
+    )
+
+    if not is_stream:
+        usage_log.api_key_id = api_key.id
+        usage_log.user_id = api_key.user_id
+        db.add(usage_log)
+
+        if usage_log.cost and usage_log.cost > 0:
+            deducted = await deduct_balance(
+                db, api_key.user_id, usage_log.cost,
+                f"API调用：{model.model_name}",
+            )
+            if not deducted:
+                raise InsufficientBalance()
+        return resp_body
+
+    collector = UsageCollector()
+    background_tasks.add_task(
+        record_stream_usage,
+        api_key.id, api_key.user_id, model.id, collector, start_time, client_ip,
+    )
+    return StreamingResponse(
+        stream_with_collector(stream_response, collector),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/models")
