@@ -34,13 +34,13 @@ call :kill_port 5173 frontend
 
 :: Start PostgreSQL and Redis
 echo [2/4] Starting PostgreSQL and Redis...
-docker-compose -f "D:\newcreat\api-gateway\docker-compose.yml" up -d postgres redis
+docker-compose -f "%~dp0docker-compose.yml" up -d postgres redis
 
 echo       Waiting for database to be ready...
 timeout /t 3 /nobreak >nul
 
 :: Install backend dependencies (first time only)
-cd /d "D:\newcreat\api-gateway\backend"
+cd /d "%~dp0backend"
 pip show api-gateway >nul 2>&1
 if %errorlevel% equ 0 goto backend_deps_ok
 echo [3/4] Installing backend dependencies (first time only)...
@@ -55,7 +55,7 @@ echo       Running database migrations...
 call alembic upgrade head 2>nul
 
 :: Install frontend dependencies (first time only)
-cd /d "D:\newcreat\api-gateway\frontend"
+cd /d "%~dp0frontend"
 if exist "node_modules" goto frontend_deps_ok
 echo       Installing frontend dependencies (first time only)...
 call npm install
@@ -66,8 +66,8 @@ echo       Frontend dependencies OK
 
 :: Start backend and frontend
 echo [4/4] Starting backend and frontend...
-start "API-Gateway-Backend" cmd /k "cd /d D:\newcreat\api-gateway\backend && uvicorn app.main:app --reload --port 8000"
-start "API-Gateway-Frontend" cmd /k "cd /d D:\newcreat\api-gateway\frontend && npm run dev"
+start "API-Gateway-Backend" cmd /k "cd /d %~dp0backend && uvicorn app.main:app --reload --port 8000"
+start "API-Gateway-Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
 echo.
 echo ========================================

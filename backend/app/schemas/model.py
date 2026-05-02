@@ -29,6 +29,10 @@ class ModelAdminCreate(BaseModel):
     max_tokens_limit: int = 4096
 
 
+class ModelAdminResponse(ModelResponse):
+    api_key: str
+
+
 class ModelAdminUpdate(BaseModel):
     provider: str | None = None
     model_name: str | None = None

@@ -10,7 +10,7 @@ from app.core.security import decrypt_api_key, encrypt_api_key
 from app.models.model_registry import ModelRegistry
 from app.models.user import User
 from app.models.usage_log import UsageLog
-from app.schemas.model import ModelAdminCreate, ModelAdminUpdate, ModelResponse
+from app.schemas.model import ModelAdminCreate, ModelAdminResponse, ModelAdminUpdate, ModelResponse
 from app.schemas.auth import UserResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -60,7 +60,7 @@ async def add_model(
     return model
 
 
-@router.get("/models/{model_id}")
+@router.get("/models/{model_id}", response_model=ModelAdminResponse)
 async def get_model(model_id: str, admin=Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get model detail including decrypted API key (admin only)."""
     from uuid import UUID
@@ -68,18 +68,18 @@ async def get_model(model_id: str, admin=Depends(require_admin), db: AsyncSessio
     model = result.scalar_one_or_none()
     if not model:
         raise HTTPException(status_code=404, detail="模型未找到")
-    return {
-        "id": str(model.id),
-        "provider": model.provider,
-        "model_name": model.model_name,
-        "display_name": model.display_name,
-        "base_url": model.base_url,
-        "api_key": decrypt_api_key(model.api_key_encrypted),
-        "is_enabled": model.is_enabled,
-        "pricing_input": float(model.pricing_input),
-        "pricing_output": float(model.pricing_output),
-        "max_tokens_limit": model.max_tokens_limit,
-    }
+    return ModelAdminResponse(
+        id=model.id,
+        provider=model.provider,
+        model_name=model.model_name,
+        display_name=model.display_name,
+        base_url=model.base_url,
+        api_key=decrypt_api_key(model.api_key_encrypted),
+        is_enabled=model.is_enabled,
+        pricing_input=float(model.pricing_input),
+        pricing_output=float(model.pricing_output),
+        max_tokens_limit=model.max_tokens_limit,
+    )
 
 
 @router.patch("/models/{model_id}/toggle")

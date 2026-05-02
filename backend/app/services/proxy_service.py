@@ -37,10 +37,17 @@ class UsageCollector:
 
 
 async def stream_with_collector(response, collector: UsageCollector):
-    """Wrap an httpx stream response, feeding chunks to the collector as they pass through."""
-    async for chunk in response.aiter_bytes():
-        collector.feed_chunk(chunk)
-        yield chunk
+    """Wrap an httpx stream response, feeding chunks to the collector as they pass through.
+
+    If the upstream hangs (no data within STREAM_READ_TIMEOUT), the stream ends gracefully
+    instead of leaving the client hanging forever.
+    """
+    try:
+        async for chunk in response.aiter_bytes():
+            collector.feed_chunk(chunk)
+            yield chunk
+    except httpx.ReadTimeout:
+        pass  # upstream idle timeout — end stream gracefully
 
 
 async def record_stream_usage(
@@ -123,10 +130,16 @@ class ProxyService:
 
         client = await self.get_client()
 
+        req_timeout = (
+            httpx.Timeout(settings.STREAM_READ_TIMEOUT * 5, connect=10.0, read=settings.STREAM_READ_TIMEOUT)
+            if is_stream else httpx.Timeout(120.0, connect=10.0)
+        )
+
         response = await client.post(
             f"{model.base_url.rstrip('/')}/chat/completions",
             json=upstream_body,
             headers=upstream_headers,
+            timeout=req_timeout,
         )
 
         latency_ms = int((time.time() - start_time) * 1000)
