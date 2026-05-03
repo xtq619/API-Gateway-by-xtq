@@ -23,12 +23,67 @@ from app.services.proxy_service import proxy_service
 from app.services.rate_limiter import rate_limiter
 
 
+def _setup_digest_scheduler():
+    """Start APScheduler for daily digest if enabled."""
+    import logging
+
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    logger = logging.getLogger(__name__)
+
+    async def run_daily_digest():
+        from app.core.database import async_session
+        from app.services.digest import compile_daily_digest
+        from app.services.notifier import send_digest_email
+
+        logger.info("Running daily digest job...")
+        try:
+            async with async_session() as db:
+                digest = await compile_daily_digest(db)
+                if digest:
+                    await send_digest_email(digest)
+                    logger.info("Daily digest sent successfully")
+                else:
+                    logger.info("No news today, digest skipped")
+        except Exception as e:
+            logger.error("Daily digest job failed: %s", e)
+
+    parts = settings.DIGEST_CRON.split()
+    if len(parts) != 5:
+        logger.error("Invalid DIGEST_CRON format: %s", settings.DIGEST_CRON)
+        return None
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        run_daily_digest,
+        CronTrigger(
+            minute=parts[0], hour=parts[1], day=parts[2],
+            month=parts[3], day_of_week=parts[4],
+        ),
+        id="daily_digest",
+        name="Daily AI Digest",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("Digest scheduler started (cron: %s)", settings.DIGEST_CRON)
+    return scheduler
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.core.security import _get_fernet
     _get_fernet()  # Validate Fernet key early — crash fast if misconfigured
     await rate_limiter.connect()
+
+    scheduler = None
+    if settings.DIGEST_ENABLED:
+        scheduler = _setup_digest_scheduler()
+
     yield
+
+    if scheduler:
+        scheduler.shutdown(wait=False)
     if rate_limiter.redis:
         await rate_limiter.redis.close()
     await proxy_service.close()

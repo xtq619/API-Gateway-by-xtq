@@ -21,6 +21,18 @@ class Settings(BaseSettings):
         "https://api.xtq619.xyz",
     ]
 
+    # 每日摘要
+    DIGEST_ENABLED: bool = False
+    DIGEST_CRON: str = "0 8 * * *"  # 每天 8:00
+
+    # 邮箱推送（QQ 邮箱 / 163 等 SMTP）
+    SMTP_HOST: str = "smtp.qq.com"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""  # QQ 邮箱填授权码，不是登录密码
+    SMTP_SENDER: str = ""    # 发件人，一般和 SMTP_USER 一致
+    SMTP_RECIPIENTS: list[str] = []  # 收件人列表
+
     class Config:
         env_file = ".env"
 
