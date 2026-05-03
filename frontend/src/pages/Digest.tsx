@@ -157,7 +157,7 @@ export default function Digest() {
           </button>
         </div>
         <p className="text-[11px] text-[var(--color-text-dim)] mt-2 font-mono">
-          UTC 时间，北京时间需要 +8（如北京时间 22:55 = UTC 14:55）
+          北京时间（UTC+8）
         </p>
       </div>
     </div>

@@ -46,9 +46,10 @@ def _setup_digest_scheduler():
         from app.models.user_digest import UserDigestPref
         from app.services.digest import compile_daily_digest
         from app.services.notifier import send_digest_email
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
 
-        now = datetime.now(timezone.utc)
+        tz_bj = timezone(timedelta(hours=8))
+        now = datetime.now(tz_bj)
         current_time = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
 
