@@ -4,7 +4,7 @@ import { Activity, CreditCard, Key, Zap } from 'lucide-react';
 
 function TypewriterTitle() {
   const [text, setText] = useState('');
-  const fullText = '星辰大海';
+  const fullText = 'API Gateway';
   const idx = useRef(0);
 
   useEffect(() => {
