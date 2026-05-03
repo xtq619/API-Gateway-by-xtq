@@ -18,7 +18,7 @@ export default function Feedback() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
+  const _isAdmin = user?.role === 'admin';
 
   const loadFeedback = async () => {
     const res = await api.listMyFeedback();

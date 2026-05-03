@@ -1,6 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Component, type ReactNode } from 'react';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -16,15 +15,6 @@ import Feedback from './pages/Feedback';
 import PublicFeedback from './pages/PublicFeedback';
 import AiNews from './pages/AiNews';
 import MusicPlayer from './components/MusicPlayer';
-
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
-  constructor(props: any) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(err: any) { return { error: String(err?.message || err) }; }
-  render() {
-    if (this.state.error) return <div style={{color:'red',padding:'40px',fontSize:'18px',whiteSpace:'pre-wrap'}}>ERROR: {this.state.error}</div>;
-    return this.props.children;
-  }
-}
 
 const queryClient = new QueryClient();
 
