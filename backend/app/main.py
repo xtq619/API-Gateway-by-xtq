@@ -18,81 +18,104 @@ from app.api.v1.models import router as models_router
 from app.api.v1.proxy import router as proxy_router
 from app.api.v1.usage import router as usage_router
 from app.api.v1.digest import router as digest_router
+from app.api.v1.user_digest import router as user_digest_router
 from app.core.config import settings
 from app.middleware.cors import setup_cors
 from app.services.proxy_service import proxy_service
 from app.services.rate_limiter import rate_limiter
 
 
+_digest_scheduler = None
+
+
 def _setup_digest_scheduler():
-    """Start APScheduler for daily digest. Reads config from DB on each run."""
-    import json
+    """Start APScheduler. Checks every minute if any user needs a digest."""
     import logging
 
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
+    from sqlalchemy import select
 
     logger = logging.getLogger(__name__)
 
-    async def run_daily_digest():
+    _last_sent: dict[str, str] = {}  # user_id -> "YYYY-MM-DD" to prevent duplicate sends
+
+    async def check_and_send():
         from app.core.database import async_session
         from app.models.digest import DigestSetting
+        from app.models.user_digest import UserDigestPref
         from app.services.digest import compile_daily_digest
         from app.services.notifier import send_digest_email
-        from sqlalchemy import select
+        from datetime import datetime, timezone
 
-        logger.info("Running daily digest job...")
+        now = datetime.now(timezone.utc)
+        current_time = now.strftime("%H:%M")
+        today = now.strftime("%Y-%m-%d")
+
         try:
             async with async_session() as db:
-                result = await db.execute(select(DigestSetting).limit(1))
-                setting = result.scalar_one_or_none()
+                # Get SMTP config
+                smtp_result = await db.execute(select(DigestSetting).limit(1))
+                smtp = smtp_result.scalar_one_or_none()
 
-                if not setting or not setting.is_enabled:
-                    logger.info("Digest disabled, skipping")
-                    return
+                if not smtp or not smtp.smtp_user or not smtp.smtp_password:
+                    return  # SMTP not configured, skip
 
-                if not setting.smtp_user or not setting.smtp_password:
-                    logger.error("SMTP not configured, skipping digest")
-                    return
-
-                try:
-                    recipients = json.loads(setting.recipients) if setting.recipients else []
-                except (json.JSONDecodeError, TypeError):
-                    recipients = []
-
-                if not recipients:
-                    logger.error("No recipients configured, skipping digest")
-                    return
-
-                digest = await compile_daily_digest(db)
-                if digest:
-                    await send_digest_email(
-                        digest_markdown=digest,
-                        smtp_host=setting.smtp_host,
-                        smtp_port=setting.smtp_port,
-                        smtp_user=setting.smtp_user,
-                        smtp_password=setting.smtp_password,
-                        smtp_sender=setting.smtp_sender or setting.smtp_user,
-                        recipients=recipients,
+                # Get all enabled users whose send_time matches now
+                result = await db.execute(
+                    select(UserDigestPref).where(
+                        UserDigestPref.is_enabled == True,
+                        UserDigestPref.email != "",
+                        UserDigestPref.send_time == current_time,
                     )
-                    logger.info("Daily digest sent successfully")
-                else:
-                    logger.info("No news today, digest skipped")
-        except Exception as e:
-            logger.error("Daily digest job failed: %s", e)
+                )
+                users = result.scalars().all()
 
-    # Default cron: every day at 8:00. Can be updated via API.
+                if not users:
+                    return
+
+                # Compile digest once for all users
+                digest = await compile_daily_digest(db)
+                if not digest:
+                    logger.info("No news today, skipping digest")
+                    return
+
+                for user_pref in users:
+                    uid = str(user_pref.user_id)
+                    if _last_sent.get(uid) == today:
+                        continue  # Already sent today
+
+                    success = await send_digest_email(
+                        digest_markdown=digest,
+                        smtp_host=smtp.smtp_host,
+                        smtp_port=smtp.smtp_port,
+                        smtp_user=smtp.smtp_user,
+                        smtp_password=smtp.smtp_password,
+                        smtp_sender=smtp.smtp_sender or smtp.smtp_user,
+                        recipients=[user_pref.email],
+                    )
+                    if success:
+                        _last_sent[uid] = today
+                        logger.info("Digest sent to %s", user_pref.email)
+        except Exception:
+            logger.exception("Digest check job failed")
+
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        run_daily_digest,
-        CronTrigger(minute="0", hour="8", day="*", month="*", day_of_week="*"),
-        id="daily_digest",
-        name="Daily AI Digest",
+        check_and_send,
+        IntervalTrigger(minutes=1),
+        id="digest_check",
+        name="Digest Check",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Digest scheduler started (default 0 8 * * *)")
+    logger.info("Digest scheduler started (checking every minute)")
     return scheduler
+
+
+async def _refresh_digest_jobs():
+    """No-op for interval-based scheduler. Placeholder for future per-user jobs."""
+    pass
 
 
 @asynccontextmanager
@@ -152,6 +175,7 @@ app.include_router(feedback_router, prefix="/api/v1")
 app.include_router(feedback_admin_router, prefix="/api/v1")
 app.include_router(news_admin_router, prefix="/api/v1")
 app.include_router(digest_router, prefix="/api/v1")
+app.include_router(user_digest_router, prefix="/api/v1")
 
 # Public OpenAI-compatible API (for end-users, API Key auth)
 app.include_router(public_router, prefix="/v1")

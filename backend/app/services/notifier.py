@@ -1,9 +1,9 @@
 import logging
 import re
+import asyncio
 from datetime import datetime, timezone
 from email.message import EmailMessage
-
-import aiosmtplib
+import smtplib
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +37,27 @@ async def send_digest_email(
     msg.set_content(digest_markdown)
     msg.add_alternative(html_body, subtype="html")
 
+    def _send_sync():
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+            # send_message 会自动调用 quit，with 语句确保连接关闭
+            return True
+
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=smtp_host,
-            port=smtp_port,
-            username=smtp_user,
-            password=smtp_password,
-            use_tls=True,
-        )
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _send_sync)
         logger.info("Digest email sent to %s", recipients)
-        return True
+        return result
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error("SMTP auth failed: %s", e)
+        return False
+    except smtplib.SMTPRecipientsRefused as e:
+        logger.error("SMTP recipients refused: %s", e)
+        return False
+    except smtplib.SMTPException as e:
+        logger.error("SMTP error: %s", e)
+        return False
     except Exception as e:
         logger.error("Failed to send digest email: %s", e)
         return False

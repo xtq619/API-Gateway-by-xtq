@@ -15,9 +15,6 @@ const apiNavItems = [
 
 const aiNavItems = [
   { to: '/news', icon: Newspaper, label: 'AI 资讯' },
-];
-
-const aiAdminNavItems = [
   { to: '/digest', icon: Mail, label: '每日摘要' },
 ];
 
@@ -38,9 +35,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuthStore();
   const section = getSection(location.pathname);
-  const baseNavItems = section === 'api' ? apiNavItems : aiNavItems;
-  const extraNavItems = section === 'ai' && isAdmin() ? aiAdminNavItems : [];
-  const navItems = [...baseNavItems, ...extraNavItems];
+  const navItems = section === 'api' ? apiNavItems : aiNavItems;
   const meta = sectionMeta[section];
   const Icon = meta.icon;
 

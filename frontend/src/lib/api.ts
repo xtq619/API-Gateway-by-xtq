@@ -97,9 +97,15 @@ export const api = {
   adminUpdateModel: (id: string, data: Record<string, unknown>) =>
     request(`/admin/models/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
-  // Digest
-  getDigestSettings: () => request('/admin/digest'),
-  updateDigestSettings: (data: Record<string, unknown>) =>
+  // Digest (admin SMTP)
+  getSmtpSettings: () => request('/admin/digest'),
+  updateSmtpSettings: (data: Record<string, unknown>) =>
     request('/admin/digest', { method: 'PATCH', body: JSON.stringify(data) }),
-  sendTestDigest: () => request('/admin/digest/test', { method: 'POST' }),
+  sendTestEmail: (email: string) =>
+    request(`/admin/digest/test?recipient_email=${encodeURIComponent(email)}`, { method: 'POST' }),
+
+  // Digest (user)
+  getMyDigestPref: () => request('/digest'),
+  updateMyDigestPref: (data: Record<string, unknown>) =>
+    request('/digest', { method: 'PATCH', body: JSON.stringify(data) }),
 };

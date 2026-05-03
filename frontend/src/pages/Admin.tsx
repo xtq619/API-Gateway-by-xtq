@@ -1,13 +1,66 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Trash2, Edit2, Plus, RefreshCw } from 'lucide-react';
+import { Trash2, Edit2, Plus, RefreshCw, Save, Send } from 'lucide-react';
 
 export default function Admin() {
   const [users, setUsers] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [showAddModel, setShowAddModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'users' | 'news' | 'feedback'>('users');
+  const [success, setSuccess] = useState<string | null>(null);
+  const [tab, setTab] = useState<'users' | 'news' | 'feedback' | 'smtp'>('users');
+
+  // SMTP state
+  const [smtp, setSmtp] = useState<any>(null);
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [testEmail, setTestEmail] = useState('');
+  const [savingSmtp, setSavingSmtp] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+
+  const loadSmtp = async () => {
+    const res = await api.getSmtpSettings();
+    if (res.ok) setSmtp(await res.json());
+  };
+
+  const saveSmtp = async () => {
+    if (!smtp) return;
+    setSavingSmtp(true);
+    setError(null);
+    setSuccess(null);
+    const data: Record<string, unknown> = {
+      smtp_host: smtp.smtp_host,
+      smtp_port: smtp.smtp_port,
+      smtp_user: smtp.smtp_user,
+      smtp_sender: smtp.smtp_sender,
+    };
+    if (smtpPassword) data.smtp_password = smtpPassword;
+    const res = await api.updateSmtpSettings(data);
+    if (res.ok) {
+      setSmtp(await res.json());
+      setSmtpPassword('');
+      setSuccess('SMTP 配置已保存');
+      setTimeout(() => setSuccess(null), 2000);
+    } else {
+      const body = await res.json().catch(() => null);
+      setError(body?.detail?.message || '保存失败');
+    }
+    setSavingSmtp(false);
+  };
+
+  const sendTest = async () => {
+    if (!testEmail.includes('@')) { setError('请输入有效邮箱'); return; }
+    setTestingSmtp(true);
+    setError(null);
+    setSuccess(null);
+    const res = await api.sendTestEmail(testEmail);
+    if (res.ok) {
+      setSuccess('测试邮件已发送');
+    } else {
+      const body = await res.json().catch(() => null);
+      setError(body?.detail?.message || '发送失败');
+    }
+    setTestingSmtp(false);
+  };
 
   // Feedback management state
   const [feedbackItems, setFeedbackItems] = useState<any[]>([]);
@@ -192,6 +245,9 @@ export default function Admin() {
       {error && (
         <div className="border border-[var(--color-danger)]/30 px-4 py-3 mb-6 text-[var(--color-danger)] text-[12px] font-mono">{error}</div>
       )}
+      {success && (
+        <div className="border border-green-500/30 px-4 py-3 mb-6 text-green-400 text-[12px] font-mono">{success}</div>
+      )}
 
       {stats && (
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -221,6 +277,9 @@ export default function Admin() {
         <button onClick={() => { setTab('feedback'); loadFeedback(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
           tab === 'feedback' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
         }`}>留言管理</button>
+        <button onClick={() => { setTab('smtp'); loadSmtp(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
+          tab === 'smtp' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
+        }`}>SMTP 配置</button>
       </div>
 
       {tab === 'users' && (<>
@@ -525,6 +584,58 @@ export default function Admin() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'smtp' && smtp && (
+        <div className="glass-card p-6">
+          <h3 className="font-mono text-[13px] text-[var(--color-text)] tracking-wider mb-6">SMTP 邮箱配置</h3>
+          <p className="text-[12px] text-[var(--color-text-muted)] mb-4">配置发件邮箱，所有用户的每日摘要邮件都通过此邮箱发送</p>
+
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">SMTP 主机</label>
+              <input value={smtp.smtp_host} onChange={e => setSmtp({ ...smtp, smtp_host: e.target.value })}
+                className={inputClass} placeholder="smtp.qq.com" />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">端口</label>
+              <input type="number" value={smtp.smtp_port} onChange={e => setSmtp({ ...smtp, smtp_port: parseInt(e.target.value) || 465 })}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">发件账号</label>
+              <input value={smtp.smtp_user} onChange={e => setSmtp({ ...smtp, smtp_user: e.target.value })}
+                className={inputClass} placeholder="your@qq.com" />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">授权码</label>
+              <input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)}
+                className={inputClass} placeholder={smtp.smtp_password_masked || '输入 SMTP 授权码'} />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">发件人名称</label>
+              <input value={smtp.smtp_sender} onChange={e => setSmtp({ ...smtp, smtp_sender: e.target.value })}
+                className={inputClass} placeholder="同发件账号" />
+            </div>
+          </div>
+
+          <div className="flex gap-3 mb-6">
+            <button onClick={saveSmtp} disabled={savingSmtp} className={btnPrimaryClass}>
+              <Save size={12} className="inline mr-1" />保存配置
+            </button>
+          </div>
+
+          <div className="border-t border-[var(--color-border)] pt-6">
+            <h4 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider mb-3">发送测试</h4>
+            <div className="flex gap-3">
+              <input value={testEmail} onChange={e => setTestEmail(e.target.value)}
+                className={inputClass} placeholder="输入测试邮箱地址" />
+              <button onClick={sendTest} disabled={testingSmtp} className={btnPrimaryClass + ' shrink-0'}>
+                <Send size={12} className="inline mr-1" />{testingSmtp ? '发送中...' : '发送测试'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
