@@ -10,7 +10,6 @@ const apiNavItems = [
   { to: '/usage', icon: Activity, label: '用量统计' },
   { to: '/billing', icon: CreditCard, label: '充值计费' },
   { to: '/models', icon: Cpu, label: '模型列表' },
-  { to: '/feedback', icon: MessageSquare, label: '建议留言' },
 ];
 
 const aiNavItems = [

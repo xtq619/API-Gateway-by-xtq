@@ -23,6 +23,7 @@ class FeedbackResponse(BaseModel):
     reply: str | None = None
     replied_at: datetime | None = None
     created_at: datetime
+    user_name: str | None = None
 
 
 class FeedbackList(BaseModel):

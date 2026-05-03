@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { Server, Bot, LogOut, Sparkles, ArrowRight } from 'lucide-react';
+import { Server, Bot, LogOut, Sparkles, ArrowRight, MessageSquare } from 'lucide-react';
 
 const sections = [
   {
@@ -22,6 +22,16 @@ const sections = [
     route: '/news',
     iconBg: 'rgba(100,160,220,0.08)',
     iconBorder: 'rgba(100,160,220,0.15)',
+  },
+  {
+    key: 'feedback',
+    icon: MessageSquare,
+    title: '建议留言',
+    subtitle: 'FEEDBACK',
+    desc: '写下你的想法和建议，查看其他用户的反馈，共同改进平台',
+    route: '/feedback',
+    iconBg: 'rgba(160,120,220,0.08)',
+    iconBorder: 'rgba(160,120,220,0.15)',
   },
 ];
 

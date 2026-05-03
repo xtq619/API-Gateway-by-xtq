@@ -33,6 +33,10 @@ export default function App() {
             <Route index element={<Hub />} />
           </Route>
 
+          <Route path="/feedback" element={<ProtectedRoute />}>
+            <Route index element={<Feedback />} />
+          </Route>
+
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -41,7 +45,6 @@ export default function App() {
               <Route path="/billing" element={<Billing />} />
               <Route path="/models" element={<Models />} />
               <Route path="/admin" element={<Admin />} />
-              <Route path="/feedback" element={<Feedback />} />
               <Route path="/news" element={<AiNews />} />
               <Route path="/digest" element={<Digest />} />
             </Route>
