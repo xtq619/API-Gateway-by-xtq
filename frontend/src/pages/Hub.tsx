@@ -10,8 +10,8 @@ const sections = [
     subtitle: 'LLM PROXY',
     desc: '统一代理 OpenAI、Claude 等多模型 API，管理密钥、用量计费、速率限制',
     route: '/dashboard',
-    iconBg: 'rgba(219,164,96,0.08)',
-    iconBorder: 'rgba(219,164,96,0.15)',
+    iconBg: 'rgba(219,164,96,0.15)',
+    iconBorder: 'rgba(219,164,96,0.25)',
   },
   {
     key: 'ai',
@@ -20,8 +20,8 @@ const sections = [
     subtitle: 'AI INSIGHT',
     desc: '每日精选 AI 行业新闻、论文、工具动态，保持前沿洞察',
     route: '/news',
-    iconBg: 'rgba(100,160,220,0.08)',
-    iconBorder: 'rgba(100,160,220,0.15)',
+    iconBg: 'rgba(100,160,220,0.15)',
+    iconBorder: 'rgba(100,160,220,0.25)',
   },
   {
     key: 'feedback',
@@ -30,8 +30,8 @@ const sections = [
     subtitle: 'FEEDBACK',
     desc: '写下你的想法和建议，查看其他用户的反馈，共同改进平台',
     route: '/feedback',
-    iconBg: 'rgba(160,120,220,0.08)',
-    iconBorder: 'rgba(160,120,220,0.15)',
+    iconBg: 'rgba(160,120,220,0.15)',
+    iconBorder: 'rgba(160,120,220,0.25)',
   },
 ];
 
@@ -104,12 +104,12 @@ export default function Hub() {
               <button
                 key={s.key}
                 onClick={() => navigate(s.route)}
-                className="group flex-1 flex flex-col items-start p-8 rounded-2xl border border-white/[0.07] border-t-white/[0.12] cursor-pointer text-left transition-all duration-300 hover:-translate-y-1 relative overflow-hidden animate-fade-in-up"
+                className="group flex-1 flex flex-col items-start p-8 rounded-2xl border border-white/[0.12] border-t-white/[0.18] cursor-pointer text-left transition-all duration-300 hover:-translate-y-1 relative overflow-hidden animate-fade-in-up"
                 style={{
                   animationDelay: `${0.2 + i * 0.15}s`,
-                  background: 'linear-gradient(180deg, rgba(40,70,110,0.06) 0%, rgba(12,14,20,0.14) 100%), rgba(8,12,20,0.16)',
+                  background: 'linear-gradient(180deg, rgba(40,70,110,0.18) 0%, rgba(12,14,20,0.35) 100%), rgba(8,12,20,0.3)',
                   backdropFilter: 'blur(36px) saturate(150%)',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 4px 24px rgba(0,0,0,0.3), 0 8px 48px rgba(0,0,0,0.2)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 24px rgba(0,0,0,0.4), 0 8px 48px rgba(0,0,0,0.3)',
                 }}
               >
                 {/* Corner accents */}
