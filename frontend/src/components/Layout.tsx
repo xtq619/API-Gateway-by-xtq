@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
 import {
-  LayoutDashboard, Key, Activity, CreditCard, Cpu, Shield, LogOut, MessageSquare, Newspaper, Server, Bot, ArrowLeft,
+  LayoutDashboard, Key, Activity, CreditCard, Cpu, Shield, LogOut, MessageSquare, Newspaper, Server, Bot, ArrowLeft, Mail,
 } from 'lucide-react';
 
 const apiNavItems = [
@@ -17,10 +17,14 @@ const aiNavItems = [
   { to: '/news', icon: Newspaper, label: 'AI 资讯' },
 ];
 
+const aiAdminNavItems = [
+  { to: '/digest', icon: Mail, label: '每日摘要' },
+];
+
 type Section = 'api' | 'ai';
 
 function getSection(pathname: string): Section {
-  if (pathname.startsWith('/news')) return 'ai';
+  if (pathname.startsWith('/news') || pathname.startsWith('/digest')) return 'ai';
   return 'api';
 }
 
@@ -34,7 +38,9 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuthStore();
   const section = getSection(location.pathname);
-  const navItems = section === 'api' ? apiNavItems : aiNavItems;
+  const baseNavItems = section === 'api' ? apiNavItems : aiNavItems;
+  const extraNavItems = section === 'ai' && isAdmin() ? aiAdminNavItems : [];
+  const navItems = [...baseNavItems, ...extraNavItems];
   const meta = sectionMeta[section];
   const Icon = meta.icon;
 

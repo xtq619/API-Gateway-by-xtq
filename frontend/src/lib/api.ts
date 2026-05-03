@@ -96,4 +96,10 @@ export const api = {
   adminGetModel: (id: string) => request(`/admin/models/${id}`),
   adminUpdateModel: (id: string, data: Record<string, unknown>) =>
     request(`/admin/models/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Digest
+  getDigestSettings: () => request('/admin/digest'),
+  updateDigestSettings: (data: Record<string, unknown>) =>
+    request('/admin/digest', { method: 'PATCH', body: JSON.stringify(data) }),
+  sendTestDigest: () => request('/admin/digest/test', { method: 'POST' }),
 };

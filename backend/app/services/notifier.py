@@ -1,46 +1,52 @@
 import logging
+import re
 from datetime import datetime, timezone
 from email.message import EmailMessage
 
 import aiosmtplib
 
-from app.core.config import settings
-
 logger = logging.getLogger(__name__)
 
 
-async def send_digest_email(digest_markdown: str) -> bool:
+async def send_digest_email(
+    digest_markdown: str,
+    smtp_host: str,
+    smtp_port: int,
+    smtp_user: str,
+    smtp_password: str,
+    smtp_sender: str,
+    recipients: list[str],
+    subject_prefix: str = "",
+) -> bool:
     """Send daily digest as an HTML email. Returns True on success."""
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+    if not smtp_user or not smtp_password:
         logger.error("SMTP not configured, cannot send digest email")
         return False
 
-    if not settings.SMTP_RECIPIENTS:
+    if not recipients:
         logger.error("No SMTP recipients configured")
         return False
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    # Convert markdown to simple HTML for better email rendering
     html_body = _markdown_to_email_html(digest_markdown, today)
 
     msg = EmailMessage()
-    msg["Subject"] = f"AI 日报 — {today}"
-    msg["From"] = settings.SMTP_SENDER or settings.SMTP_USER
-    msg["To"] = ", ".join(settings.SMTP_RECIPIENTS)
-    msg.set_content(digest_markdown)  # Plain text fallback
+    msg["Subject"] = f"{subject_prefix}AI 日报 — {today}"
+    msg["From"] = smtp_sender or smtp_user
+    msg["To"] = ", ".join(recipients)
+    msg.set_content(digest_markdown)
     msg.add_alternative(html_body, subtype="html")
 
     try:
         await aiosmtplib.send(
             msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
+            hostname=smtp_host,
+            port=smtp_port,
+            username=smtp_user,
+            password=smtp_password,
             use_tls=True,
         )
-        logger.info("Digest email sent to %s", settings.SMTP_RECIPIENTS)
+        logger.info("Digest email sent to %s", recipients)
         return True
     except Exception as e:
         logger.error("Failed to send digest email: %s", e)
@@ -48,22 +54,11 @@ async def send_digest_email(digest_markdown: str) -> bool:
 
 
 def _markdown_to_email_html(markdown: str, date: str) -> str:
-    """Convert digest markdown to a clean HTML email template."""
-    import re
-
     body = markdown
-
-    # Headers
     body = re.sub(r"^# (.+)$", r"<h1>\1</h1>", body, flags=re.MULTILINE)
     body = re.sub(r"^## (.+)$", r"<h2>\1</h2>", body, flags=re.MULTILINE)
-
-    # Bold
     body = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", body)
-
-    # Links
     body = re.sub(r"\[(.+?)\]\((.+?)\)", r'<a href="\2">\1</a>', body)
-
-    # Paragraphs
     body = re.sub(r"^(?!<[hou])(.+)$", r"<p>\1</p>", body, flags=re.MULTILINE)
 
     return f"""<!DOCTYPE html>

@@ -14,6 +14,7 @@ import Admin from './pages/Admin';
 import Feedback from './pages/Feedback';
 import PublicFeedback from './pages/PublicFeedback';
 import AiNews from './pages/AiNews';
+import Digest from './pages/Digest';
 import MusicPlayer from './components/MusicPlayer';
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/admin" element={<Admin />} />
               <Route path="/feedback" element={<Feedback />} />
               <Route path="/news" element={<AiNews />} />
+              <Route path="/digest" element={<Digest />} />
             </Route>
           </Route>
 

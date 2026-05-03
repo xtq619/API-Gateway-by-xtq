@@ -17,6 +17,7 @@ from app.api.v1.keys import router as keys_router
 from app.api.v1.models import router as models_router
 from app.api.v1.proxy import router as proxy_router
 from app.api.v1.usage import router as usage_router
+from app.api.v1.digest import router as digest_router
 from app.core.config import settings
 from app.middleware.cors import setup_cors
 from app.services.proxy_service import proxy_service
@@ -24,7 +25,8 @@ from app.services.rate_limiter import rate_limiter
 
 
 def _setup_digest_scheduler():
-    """Start APScheduler for daily digest if enabled."""
+    """Start APScheduler for daily digest. Reads config from DB on each run."""
+    import json
     import logging
 
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -34,39 +36,62 @@ def _setup_digest_scheduler():
 
     async def run_daily_digest():
         from app.core.database import async_session
+        from app.models.digest import DigestSetting
         from app.services.digest import compile_daily_digest
         from app.services.notifier import send_digest_email
+        from sqlalchemy import select
 
         logger.info("Running daily digest job...")
         try:
             async with async_session() as db:
+                result = await db.execute(select(DigestSetting).limit(1))
+                setting = result.scalar_one_or_none()
+
+                if not setting or not setting.is_enabled:
+                    logger.info("Digest disabled, skipping")
+                    return
+
+                if not setting.smtp_user or not setting.smtp_password:
+                    logger.error("SMTP not configured, skipping digest")
+                    return
+
+                try:
+                    recipients = json.loads(setting.recipients) if setting.recipients else []
+                except (json.JSONDecodeError, TypeError):
+                    recipients = []
+
+                if not recipients:
+                    logger.error("No recipients configured, skipping digest")
+                    return
+
                 digest = await compile_daily_digest(db)
                 if digest:
-                    await send_digest_email(digest)
+                    await send_digest_email(
+                        digest_markdown=digest,
+                        smtp_host=setting.smtp_host,
+                        smtp_port=setting.smtp_port,
+                        smtp_user=setting.smtp_user,
+                        smtp_password=setting.smtp_password,
+                        smtp_sender=setting.smtp_sender or setting.smtp_user,
+                        recipients=recipients,
+                    )
                     logger.info("Daily digest sent successfully")
                 else:
                     logger.info("No news today, digest skipped")
         except Exception as e:
             logger.error("Daily digest job failed: %s", e)
 
-    parts = settings.DIGEST_CRON.split()
-    if len(parts) != 5:
-        logger.error("Invalid DIGEST_CRON format: %s", settings.DIGEST_CRON)
-        return None
-
+    # Default cron: every day at 8:00. Can be updated via API.
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         run_daily_digest,
-        CronTrigger(
-            minute=parts[0], hour=parts[1], day=parts[2],
-            month=parts[3], day_of_week=parts[4],
-        ),
+        CronTrigger(minute="0", hour="8", day="*", month="*", day_of_week="*"),
         id="daily_digest",
         name="Daily AI Digest",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Digest scheduler started (cron: %s)", settings.DIGEST_CRON)
+    logger.info("Digest scheduler started (default 0 8 * * *)")
     return scheduler
 
 
@@ -76,9 +101,7 @@ async def lifespan(app: FastAPI):
     _get_fernet()  # Validate Fernet key early — crash fast if misconfigured
     await rate_limiter.connect()
 
-    scheduler = None
-    if settings.DIGEST_ENABLED:
-        scheduler = _setup_digest_scheduler()
+    scheduler = _setup_digest_scheduler()
 
     yield
 
@@ -128,6 +151,7 @@ app.include_router(admin_router, prefix="/api/v1")
 app.include_router(feedback_router, prefix="/api/v1")
 app.include_router(feedback_admin_router, prefix="/api/v1")
 app.include_router(news_admin_router, prefix="/api/v1")
+app.include_router(digest_router, prefix="/api/v1")
 
 # Public OpenAI-compatible API (for end-users, API Key auth)
 app.include_router(public_router, prefix="/v1")
