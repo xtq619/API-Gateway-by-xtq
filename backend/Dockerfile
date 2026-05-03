@@ -2,10 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv
+# 使用国内 PyPI 镜像
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip install --no-cache-dir uv
 
 COPY pyproject.toml .
-RUN uv pip install --system .
+RUN uv pip install --system --index-url https://pypi.tuna.tsinghua.edu.cn/simple .
 
 COPY . .
 
