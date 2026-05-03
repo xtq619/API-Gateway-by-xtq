@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { MessageSquare, Send, Bug, Lightbulb, Ellipsis, Trash2 } from 'lucide-react';
-import { useAuthStore } from '../lib/store';
 
 const categoryConfig: Record<string, { icon: typeof MessageSquare; label: string }> = {
   suggestion: { icon: Lightbulb, label: '建议' },
@@ -17,8 +16,6 @@ export default function Feedback() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const { user } = useAuthStore();
-  const _isAdmin = user?.role === 'admin';
 
   const loadFeedback = async () => {
     const res = await api.listMyFeedback();
