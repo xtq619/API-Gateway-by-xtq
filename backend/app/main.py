@@ -5,7 +5,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.public.proxy import router as public_router
+from app.api.public.feedback import router as public_feedback_router
+from app.api.public.news import router as public_news_router
+from app.api.v1.news_admin import router as news_admin_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.feedback import router as feedback_router
+from app.api.v1.feedback_admin import router as feedback_admin_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.billing import router as billing_router
 from app.api.v1.keys import router as keys_router
@@ -65,9 +70,16 @@ app.include_router(proxy_router, prefix="/api/v1")
 app.include_router(usage_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(feedback_router, prefix="/api/v1")
+app.include_router(feedback_admin_router, prefix="/api/v1")
+app.include_router(news_admin_router, prefix="/api/v1")
 
 # Public OpenAI-compatible API (for end-users, API Key auth)
 app.include_router(public_router, prefix="/v1")
+
+# Public feedback wall (no auth)
+app.include_router(public_feedback_router, prefix="/api/v1/public")
+app.include_router(public_news_router, prefix="/api/v1/public")
 
 
 @app.get("/health")

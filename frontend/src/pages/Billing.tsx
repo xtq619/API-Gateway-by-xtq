@@ -56,7 +56,7 @@ export default function Billing() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-1 bg-[var(--color-surface)] border border-[var(--color-border)] p-6">
+        <div className="lg:col-span-1 glass-card p-6">
           <span className="font-mono text-[10px] text-[var(--color-text-muted)] tracking-[0.25em] uppercase">余额</span>
           <p className="text-3xl font-semibold text-[var(--color-text)] mt-2 font-mono tabular-nums">${balance.toFixed(4)}</p>
           <div className="mt-5 space-y-3">
@@ -72,7 +72,7 @@ export default function Billing() {
           </div>
         </div>
 
-        <div className="lg:col-span-2 bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden">
+        <div className="lg:col-span-2 glass-card overflow-hidden">
           <div className="p-4 border-b border-[var(--color-border)]">
             <h3 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider uppercase">交易记录</h3>
           </div>

@@ -65,15 +65,21 @@ echo       Frontend dependencies OK
 :frontend_deps_done
 
 :: Start backend and frontend
-echo [4/4] Starting backend and frontend...
+echo [4/5] Starting backend and frontend...
 start "API-Gateway-Backend" cmd /k "cd /d %~dp0backend && uvicorn app.main:app --reload --port 8000"
 start "API-Gateway-Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
+
+:: Start Cloudflare Tunnel
+echo [5/5] Starting Cloudflare Tunnel...
+start "API-Gateway-Tunnel" cmd /k "cloudflared tunnel run xtq619"
 
 echo.
 echo ========================================
 echo   All services started!
-echo   Frontend: http://localhost:5173
-echo   Backend API Docs: http://localhost:8000/docs
+echo   Frontend (local):  http://localhost:5173
+echo   Frontend (public): https://app.xtq619.xyz
+echo   API (public):      https://api.xtq619.xyz
+echo   Backend API Docs:  http://localhost:8000/docs
 echo ========================================
 echo.
 echo Closing this window does not stop the services.

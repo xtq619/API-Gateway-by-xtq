@@ -64,7 +64,7 @@ export default function Dashboard() {
           return (
             <div
               key={card.label}
-              className="bg-[var(--color-surface)] border border-[var(--color-border)] p-5 animate-fade-in-up"
+              className="glass-card p-5 animate-fade-in-up"
               style={{ animationDelay: `${i * 0.1}s` }}
             >
               <div className="flex items-center gap-3 mb-3">
@@ -77,7 +77,7 @@ export default function Dashboard() {
         })}
       </div>
 
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6">
+      <div className="glass-card p-6">
         <h3 className="font-mono text-[13px] text-[var(--color-text)] tracking-wide mb-4 uppercase">快速开始</h3>
         <ol className="text-[13px] text-[var(--color-text-muted)] space-y-3 list-decimal list-inside">
           <li>在 <strong className="text-[var(--color-text)]">API 密钥</strong> 页面创建密钥</li>

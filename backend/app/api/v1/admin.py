@@ -5,23 +5,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user_id
+from app.core.dependencies import require_admin
 from app.core.security import decrypt_api_key, encrypt_api_key
 from app.models.model_registry import ModelRegistry
 from app.models.user import User
 from app.models.usage_log import UsageLog
+from app.models.api_key import ApiKey, api_key_models
+from app.models.billing import BillingAccount, BillingTransaction
+from app.models.feedback import Feedback
 from app.schemas.model import ModelAdminCreate, ModelAdminResponse, ModelAdminUpdate, ModelResponse
 from app.schemas.auth import UserResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-async def require_admin(user_id: str = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user or user.role != "admin":
-        raise HTTPException(status_code=403, detail="需要管理员权限")
-    return user
 
 
 @router.get("/users", response_model=list[UserResponse])
@@ -137,6 +132,39 @@ async def delete_model(model_id: str, admin=Depends(require_admin), db: AsyncSes
     await db.delete(model)
     await db.flush()
     return {"detail": "模型已删除"}
+
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(
+    user_id: str,
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from uuid import UUID
+    uid = UUID(user_id)
+    if str(admin.id) == user_id:
+        raise HTTPException(status_code=400, detail="不能删除自己")
+
+    user = await db.get(User, uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # Delete related records
+    for fk in [BillingTransaction, UsageLog, Feedback]:
+        await db.execute(fk.__table__.delete().where(fk.user_id == uid))
+
+    keys = (await db.execute(select(ApiKey).where(ApiKey.user_id == uid))).scalars().all()
+    for key in keys:
+        await db.execute(api_key_models.delete().where(api_key_models.c.api_key_id == key.id))
+        await db.delete(key)
+
+    billing = (await db.execute(select(BillingAccount).where(BillingAccount.user_id == uid))).scalar_one_or_none()
+    if billing:
+        await db.delete(billing)
+
+    await db.delete(user)
+    await db.commit()
+    return None
 
 
 @router.get("/stats")

@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     DEFAULT_RATE_LIMIT_RPM: int = 60
     MARKUP_RATIO: float = 1.5
     STREAM_READ_TIMEOUT: int = 60
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:8000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "https://app.xtq619.xyz",
+        "https://api.xtq619.xyz",
+    ]
 
     class Config:
         env_file = ".env"

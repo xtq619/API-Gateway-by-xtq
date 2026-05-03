@@ -55,8 +55,39 @@ export const api = {
   getTransactions: (limit = 50, offset = 0) =>
     request(`/billing/transactions?limit=${limit}&offset=${offset}`),
 
+  // Feedback
+  createFeedback: (data: { content: string; category?: string }) =>
+    request('/feedback', { method: 'POST', body: JSON.stringify(data) }),
+  listMyFeedback: (limit = 20, offset = 0) =>
+    request(`/feedback?limit=${limit}&offset=${offset}`),
+  deleteFeedback: (id: string) =>
+    request(`/feedback/${id}`, { method: 'DELETE' }),
+  // Admin feedback
+  adminListFeedback: (limit = 50, offset = 0) =>
+    request(`/admin/feedback?limit=${limit}&offset=${offset}`),
+  adminReplyFeedback: (id: string, reply: string) =>
+    request(`/admin/feedback/${id}/reply`, { method: 'PATCH', body: JSON.stringify({ reply }) }),
+  listPublicFeedback: (limit = 20, offset = 0) =>
+    fetch(`/api/v1/public/feedback?limit=${limit}&offset=${offset}`).then(r => r.json()),
+
+  // AI News
+  listNews: (limit = 20, offset = 0, category?: string) =>
+    fetch(`/api/v1/public/news?limit=${limit}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ''}`).then(r => r.json()),
+  adminListNews: (limit = 20, offset = 0, publishedOnly = false) =>
+    request(`/admin/news?limit=${limit}&offset=${offset}&published_only=${publishedOnly}`),
+  adminCreateNews: (data: { title: string; summary: string; content?: string; category: string; source_name: string; source_url?: string; is_published: boolean }) =>
+    request('/admin/news', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateNews: (id: string, data: Record<string, unknown>) =>
+    request(`/admin/news/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  adminGetNews: (id: string) => request(`/admin/news/${id}`),
+  adminDeleteNews: (id: string) =>
+    request(`/admin/news/${id}`, { method: 'DELETE' }),
+  autoFetchNews: () => request('/admin/news/auto-fetch', { method: 'POST' }),
+  listRssSources: () => request('/admin/news/auto-fetch/sources'),
+
   // Admin
   adminUsers: () => request('/admin/users'),
+  adminDeleteUser: (id: string) => request(`/admin/users/${id}`, { method: 'DELETE' }),
   adminStats: () => request('/admin/stats'),
   adminAddModel: (data: { provider: string; model_name: string; display_name: string; base_url: string; api_key: string; pricing_input: number; pricing_output: number; max_tokens_limit: number }) =>
     request('/admin/models', { method: 'POST', body: JSON.stringify(data) }),

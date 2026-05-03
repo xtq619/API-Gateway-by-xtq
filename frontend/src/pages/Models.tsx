@@ -97,7 +97,7 @@ export default function Models() {
 
       {editing && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6 w-full max-w-lg mx-4">
+          <div className="glass-card p-6 w-full max-w-lg mx-4">
             <h3 className="font-mono text-[13px] text-[var(--color-text)] tracking-wider mb-4">编辑模型</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -159,7 +159,7 @@ export default function Models() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {models.map(model => (
-          <div key={model.id} className="bg-[var(--color-surface)] border border-[var(--color-border)] p-5 group">
+          <div key={model.id} className="glass-card p-5 group">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-[var(--color-text)] text-[15px]">{model.display_name}</h3>
               <div className="flex items-center gap-2">
@@ -194,7 +194,7 @@ export default function Models() {
           </div>
         ))}
         {models.length === 0 && !error && (
-          <div className="col-span-full bg-[var(--color-surface)] border border-[var(--color-border)] p-16 text-center text-[var(--color-text-dim)] text-[12px] font-mono">
+          <div className="col-span-full glass-card p-16 text-center text-[var(--color-text-dim)] text-[12px] font-mono">
             暂无可用模型，请管理员先添加模型。
           </div>
         )}

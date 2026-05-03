@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
+    allowedHosts: ['localhost', '.trycloudflare.com', '.xtq619.xyz'],
     proxy: {
       '/api': 'http://localhost:8000',
       '/v1': 'http://localhost:8000',

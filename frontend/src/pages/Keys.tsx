@@ -211,7 +211,7 @@ export default function Keys() {
       )}
 
       {showCreate && (
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6 mb-6">
+        <div className="glass-card p-6 mb-6">
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -255,7 +255,7 @@ export default function Keys() {
         </div>
       )}
 
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <table className="w-full text-[13px]">
           <thead className="bg-[var(--color-surface-light)] border-b border-[var(--color-border)]">
             <tr>
@@ -333,7 +333,7 @@ export default function Keys() {
 
       {editingKey && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setEditingKey(null)}>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="glass-card p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
             <h3 className="font-mono text-[13px] text-[var(--color-text)] tracking-wider mb-4">模型权限 — {editingKey.name}</h3>
             <label className="flex items-center gap-2 text-[12px] font-mono text-[var(--color-text-muted)] mb-3">
               <input type="checkbox" checked={editAllModels} onChange={e => setEditAllModels(e.target.checked)}

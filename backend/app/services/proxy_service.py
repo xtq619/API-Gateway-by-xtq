@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 
 import httpx
@@ -11,6 +12,8 @@ from app.models.api_key import ApiKey
 from app.models.model_registry import ModelRegistry
 from app.models.usage_log import UsageLog
 from app.services.billing_service import deduct_balance
+
+logger = logging.getLogger(__name__)
 
 
 class UsageCollector:
@@ -40,14 +43,22 @@ async def stream_with_collector(response, collector: UsageCollector):
     """Wrap an httpx stream response, feeding chunks to the collector as they pass through.
 
     If the upstream hangs (no data within STREAM_READ_TIMEOUT), the stream ends gracefully
-    instead of leaving the client hanging forever.
+    with a [DONE] sentinel so OpenAI-compatible clients don't error out.
     """
+    stream_ended_normally = False
     try:
         async for chunk in response.aiter_bytes():
             collector.feed_chunk(chunk)
+            if b"data: [DONE]" in chunk:
+                stream_ended_normally = True
             yield chunk
     except httpx.ReadTimeout:
-        pass  # upstream idle timeout — end stream gracefully
+        logger.warning("Upstream stream timed out, sending [DONE] to client")
+        yield b"data: [DONE]\n\n"
+    except Exception:
+        if not stream_ended_normally:
+            yield b"data: [DONE]\n\n"
+        raise
 
 
 async def record_stream_usage(
@@ -80,11 +91,19 @@ async def record_stream_usage(
                     request_ip=request_ip,
                 ))
                 if cost > 0:
-                    await deduct_balance(db, user_id, cost, f"API调用：{model.model_name}")
+                    deducted = await deduct_balance(db, user_id, cost, f"API调用：{model.model_name}")
+                    if not deducted:
+                        logger.warning(
+                            "Stream billing: insufficient balance for user %s, cost=%.6f, model=%s",
+                            user_id, cost, model.model_name,
+                        )
 
             await db.commit()
         except Exception:
             await db.rollback()
+            logger.exception(
+                "Stream billing failed for user %s, model %s", user_id, model_id,
+            )
 
 
 def _calculate_cost(model: ModelRegistry, input_tokens: int, output_tokens: int) -> float:

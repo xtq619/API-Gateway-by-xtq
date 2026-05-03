@@ -14,7 +14,7 @@ function SummaryCards({ summary }: { summary: any }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       {cards.map((c, i) => (
-        <div key={c.label} className="bg-[var(--color-surface)] border border-[var(--color-border)] px-5 py-4 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
+        <div key={c.label} className="glass-card px-5 py-4 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
           <div className="text-[10px] font-mono tracking-[0.15em] text-[var(--color-text-muted)] mb-2">{c.label}</div>
           <div className="text-xl font-mono tabular-nums" style={{ color: c.color }}>{c.value}</div>
         </div>
@@ -36,7 +36,7 @@ function PerModelTable({ stats }: { stats: any[] }) {
   if (entries.length === 0) return null;
 
   return (
-    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden mb-6">
+    <div className="glass-card overflow-hidden mb-6">
       <div className="p-4 border-b border-[var(--color-border)]">
         <h3 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider uppercase">模型用量明细</h3>
       </div>
@@ -146,7 +146,7 @@ export default function Usage() {
 
       {chartData.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6">
+          <div className="glass-card p-6">
             <h3 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider uppercase mb-4">Token 用量</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={chartData}>
@@ -166,7 +166,7 @@ export default function Usage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-6">
+          <div className="glass-card p-6">
             <h3 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider uppercase mb-4">费用 (USD)</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={chartData}>
@@ -190,7 +190,7 @@ export default function Usage() {
       )}
 
       {!loading && chartData.length === 0 && summary && !error && (
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] px-6 py-10 mb-6 text-center">
+        <div className="glass-card px-6 py-10 mb-6 text-center">
           <div className="text-[11px] font-mono text-[var(--color-text-dim)] tracking-wider">所选时间段暂无数据</div>
         </div>
       )}

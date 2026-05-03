@@ -8,10 +8,12 @@ from app.core.database import Base
 
 # Import all models so Base.metadata includes them
 from app.models.user import User
-from app.models.api_key import ApiKey
+from app.models.api_key import ApiKey, api_key_models
 from app.models.model_registry import ModelRegistry
 from app.models.usage_log import UsageLog
 from app.models.billing import BillingAccount, BillingTransaction
+from app.models.feedback import Feedback
+from app.models.ai_news import AiNews
 
 config = context.config
 if config.config_file_name is not None:
