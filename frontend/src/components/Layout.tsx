@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
 import {
-  LayoutDashboard, Key, Activity, CreditCard, Cpu, Shield, LogOut, MessageSquare,
+  LayoutDashboard, Key, Activity, CreditCard, Cpu, Shield, LogOut,
   Newspaper, Server, Bot, ArrowLeft, Mail, PanelLeftClose, PanelLeftOpen, Menu, X,
 } from 'lucide-react';
 
