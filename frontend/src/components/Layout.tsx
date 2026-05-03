@@ -25,7 +25,7 @@ function getSection(pathname: string): Section {
 }
 
 const sectionMeta: Record<Section, { icon: typeof Server; label: string; subtitle: string }> = {
-  api: { icon: Server, label: 'API Gateway', subtitle: 'LLM PROXY' },
+  api: { icon: Server, label: '星辰大海', subtitle: 'LLM PROXY' },
   ai: { icon: Bot, label: 'AI 资讯', subtitle: 'AI INSIGHT' },
 };
 

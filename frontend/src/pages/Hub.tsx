@@ -6,7 +6,7 @@ const sections = [
   {
     key: 'api',
     icon: Server,
-    title: 'API Gateway',
+    title: '星辰大海',
     subtitle: 'LLM PROXY',
     desc: '统一代理 OpenAI、Claude 等多模型 API，管理密钥、用量计费、速率限制',
     route: '/dashboard',
