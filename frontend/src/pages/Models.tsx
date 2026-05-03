@@ -109,6 +109,7 @@ export default function Models() {
                     <option value="anthropic">Anthropic</option>
                     <option value="azure">Azure</option>
                     <option value="deepseek">DeepSeek</option>
+                    <option value="xiaomi">Xiaomi MiMo</option>
                     <option value="custom">Custom</option>
                   </select>
                 </div>

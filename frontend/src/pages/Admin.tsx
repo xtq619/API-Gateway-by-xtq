@@ -53,6 +53,7 @@ export default function Admin() {
     anthropic: 'https://api.anthropic.com/v1',
     azure: 'https://YOUR-RESOURCE.openai.azure.com',
     deepseek: 'https://api.deepseek.com/v1',
+    xiaomi: 'https://s-model.cn-beijing.volces.com/api/v3',
     custom: '',
   };
 
@@ -233,6 +234,7 @@ export default function Admin() {
                 <select value={modelForm.provider} onChange={e => handleProviderChange(e.target.value)}
                   className={inputClass}>
                   <option value="deepseek">DeepSeek</option>
+                  <option value="xiaomi">Xiaomi MiMo</option>
                   <option value="openai">OpenAI</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="azure">Azure</option>
