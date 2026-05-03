@@ -37,7 +37,8 @@ async def list_all_feedback(
     return FeedbackList(
         items=[FeedbackResponse(
             id=fb.id, content=fb.content, category=fb.category,
-            status=fb.status, created_at=fb.created_at,
+            status=fb.status, reply=fb.reply, replied_at=fb.replied_at,
+            created_at=fb.created_at,
             user_name=fb.user.name if fb.user else None,
         ) for fb in items],
         total=total,
