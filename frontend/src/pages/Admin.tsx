@@ -53,7 +53,7 @@ export default function Admin() {
     anthropic: 'https://api.anthropic.com/v1',
     azure: 'https://YOUR-RESOURCE.openai.azure.com',
     deepseek: 'https://api.deepseek.com/v1',
-    xiaomi: 'https://s-model.cn-beijing.volces.com/api/v3',
+    xiaomi: 'https://token-plan-cn.xiaomimimo.com/v1',
     custom: '',
   };
 
