@@ -37,7 +37,8 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-form-panel">
-        <h1 className="auth-hero-title">Where Humans and Agents Create</h1>
+        <h1 className="auth-hero-title">智能之上，是星辰大海。</h1>
+        <p className="auth-hero-subtitle">Beyond intelligence, the cosmos awaits.</p>
         <div className="auth-form-card">
           <h3>登录</h3>
           <p className="subtitle">Sign in to your account</p>

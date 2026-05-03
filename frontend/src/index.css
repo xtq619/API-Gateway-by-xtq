@@ -166,6 +166,18 @@ body::before {
   z-index: -1;
 }
 
+.auth-hero-subtitle {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: center;
+  letter-spacing: 0.18em;
+  color: rgba(180, 200, 230, 0.5);
+  margin: -28px 0 36px 0;
+  position: relative;
+  z-index: 2;
+}
+
 @keyframes title-in {
   0% { opacity: 0; transform: translateY(12px); }
   100% { opacity: 1; transform: translateY(0); }
