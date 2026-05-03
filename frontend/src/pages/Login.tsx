@@ -68,8 +68,6 @@ export default function Login() {
 
           <p className="auth-link stagger-4 animate-fade-in-up">
             还没有账号？<Link to="/register">注册</Link>
-            <span className="mx-2" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-            <Link to="/feedback/wall">留言墙</Link>
           </p>
         </div>
       </div>

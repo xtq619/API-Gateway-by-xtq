@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.feedback import Feedback
 
@@ -54,6 +55,7 @@ async def list_all_feedback(db: AsyncSession, limit: int, offset: int) -> tuple[
 
     q = (
         select(Feedback)
+        .options(selectinload(Feedback.user))
         .order_by(Feedback.created_at.desc())
         .limit(limit)
         .offset(offset)
