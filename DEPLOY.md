@@ -160,3 +160,10 @@ docker system prune -a --volumes
 | API | https://api.xtq619.xyz |
 | API 文档 | https://api.xtq619.xyz/docs |
 | 健康检查 | https://api.xtq619.xyz/health |
+
+## 管理员账号
+
+| 项目 | 值 |
+|------|------|
+| 邮箱 | admin@xtq619.xyz |
+| 密码 | admin123 |
