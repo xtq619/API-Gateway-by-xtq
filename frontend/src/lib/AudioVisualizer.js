@@ -1,8 +1,7 @@
 /**
- * AudioVisualizer — 3D 粒子云
+ * AudioVisualizer — 3D 粒子云（透明背景 + 鼠标跟随）
  *
- * 球形分布 → 3D 旋转 → 透视投影 → 噪声形变 → 音频驱动
- * 离屏 canvas 拖尾 + 主 canvas 透明
+ * 粒子连线拖尾替代黑色覆盖，完全透明
  */
 
 class SimplexNoise {
@@ -46,14 +45,11 @@ export default class AudioVisualizer {
     this.height = options.height || 600;
     this.fftSize = options.fftSize || 512;
     this.smoothingFactor = options.smoothingFactor ?? 0.82;
-    this.radius = options.baseRadius || 130;
+    this.radius = options.baseRadius || 160;
     this.particleCount = options.particleCount || 2000;
 
     this.canvas = null;
     this.ctx = null;
-    this._trail = null;
-    this._tctx = null;
-
     this.audioCtx = null;
     this.analyser = null;
     this.source = null;
@@ -70,10 +66,21 @@ export default class AudioVisualizer {
     this._particles = [];
     this._burst = [];
 
-    // 3D 旋转角
     this._rotX = 0;
     this._rotY = 0;
     this._rotZ = 0;
+
+    // 鼠标跟随
+    this._mouseX = this.width / 2;
+    this._mouseY = this.height / 2;
+    this._centerX = this.width / 2;
+    this._centerY = this.height / 2;
+
+    this._onMouseMove = (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      this._mouseX = (e.clientX - rect.left) * (this.width / rect.width);
+      this._mouseY = (e.clientY - rect.top) * (this.height / rect.height);
+    };
 
     this._initCanvas();
     this._initParticles();
@@ -87,30 +94,25 @@ export default class AudioVisualizer {
     this.canvas.style.width = this.width + 'px';
     this.canvas.style.height = this.height + 'px';
     this.canvas.style.background = 'transparent';
+    this.canvas.style.cursor = 'crosshair';
     this.ctx = this.canvas.getContext('2d');
     this.container.appendChild(this.canvas);
-
-    this._trail = document.createElement('canvas');
-    this._trail.width = this.width;
-    this._trail.height = this.height;
-    this._tctx = this._trail.getContext('2d');
+    this.container.addEventListener('mousemove', this._onMouseMove);
   }
 
   _initParticles() {
     this._particles = [];
     for (let i = 0; i < this.particleCount; i++) {
-      // 球形分布（Fibonacci sphere）
       const phi = Math.acos(1 - 2 * (i + 0.5) / this.particleCount);
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const r = this.radius * (0.3 + Math.random() * 0.7); // 球壳厚度
-
+      const r = this.radius * (0.2 + Math.random() * 0.8);
       this._particles.push({
         bx: Math.sin(phi) * Math.cos(theta) * r,
         by: Math.sin(phi) * Math.sin(theta) * r,
         bz: Math.cos(phi) * r,
-        x: 0, y: 0, z: 0,
-        size: 0.6 + Math.random() * 1.2,
-        baseAlpha: 0.15 + Math.random() * 0.35,
+        prevSx: 0, prevSy: 0, // 上一帧屏幕位置（连线拖尾）
+        size: 0.5 + Math.random() * 1.3,
+        baseAlpha: 0.12 + Math.random() * 0.35,
       });
     }
   }
@@ -165,29 +167,21 @@ export default class AudioVisualizer {
 
   getDownloadURL(blob) { return URL.createObjectURL(blob); }
 
-  // ─── 3D 旋转 ──────────────────────────────────────────
-
   _rotate3D(x, y, z, ax, ay, az) {
-    // X 轴旋转
     let y1 = y * Math.cos(ax) - z * Math.sin(ax);
     let z1 = y * Math.sin(ax) + z * Math.cos(ax);
-    // Y 轴旋转
     let x2 = x * Math.cos(ay) + z1 * Math.sin(ay);
     let z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
-    // Z 轴旋转
     let x3 = x2 * Math.cos(az) - y1 * Math.sin(az);
     let y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
     return { x: x3, y: y3, z: z2 };
   }
 
-  // ─── 主循环 ───────────────────────────────────────────
-
   _draw() {
     this.rafId = requestAnimationFrame(() => this._draw());
 
-    const { ctx, _tctx: tctx, _trail: trail, analyser, smoothedData, noise } = this;
+    const { ctx, analyser, smoothedData, noise } = this;
     const W = this.width, H = this.height;
-    const cx = W / 2, cy = H / 2;
     const bufLen = analyser.frequencyBinCount;
     const raw = new Uint8Array(bufLen);
     analyser.getByteFrequencyData(raw);
@@ -211,23 +205,27 @@ export default class AudioVisualizer {
     const playing = !this.audio.paused;
     this.time += 0.006;
 
-    // 3D 旋转速度
     this._rotY += 0.004 + bass * 0.003;
     this._rotX += 0.002 + mid * 0.001;
     this._rotZ += 0.001;
 
-    // 拖尾
-    tctx.fillStyle = playing ? 'rgba(0,0,0,0.04)' : 'rgba(0,0,0,0.1)';
-    tctx.fillRect(0, 0, W, H);
+    // 鼠标跟随（平滑插值）
+    this._centerX += (this._mouseX - this._centerX) * 0.04;
+    this._centerY += (this._mouseY - this._centerY) * 0.04;
 
-    const noiseScale = 0.006 + mid * 0.004;
-    const amp = 15 + bass * 50 + mid * 20;
-    const fov = 400; // 透视距离
+    const cx = this._centerX;
+    const cy = this._centerY;
 
-    // 3D 变换 + 透视投影
+    const noiseScale = 0.005 + mid * 0.003;
+    const amp = 20 + bass * 60 + mid * 25;
+    const fov = 500;
+
+    // 完全透明清除
+    ctx.clearRect(0, 0, W, H);
+
+    // 投影 + 排序
     const projected = [];
     for (const p of this._particles) {
-      // 噪声形变
       const n = noise.noise3D(p.bx * noiseScale, p.by * noiseScale, p.bz * noiseScale + this.time);
       const n2 = noise.noise3D(p.bx * noiseScale * 2 + 10, p.by * noiseScale * 2, this.time * 1.5);
 
@@ -235,50 +233,58 @@ export default class AudioVisualizer {
       const oy = p.by + n * amp * 0.7 + n2 * amp * 0.4;
       const oz = p.bz + n * amp * 0.5;
 
-      // 3D 旋转
       const r = this._rotate3D(ox, oy, oz, this._rotX, this._rotY, this._rotZ);
-
-      // 透视投影
       const scale = fov / (fov + r.z);
-      const sx = cx + r.x * scale;
-      const sy = cy + r.y * scale;
 
-      projected.push({ sx, sy, z: r.z, scale, size: p.size, alpha: p.baseAlpha });
+      projected.push({
+        sx: cx + r.x * scale,
+        sy: cy + r.y * scale,
+        z: r.z, scale,
+        prevSx: p.prevSx, prevSy: p.prevSy,
+        size: p.size, alpha: p.baseAlpha,
+        p,
+      });
     }
 
-    // 按 z 排序（远的先画）
     projected.sort((a, b) => b.z - a.z);
 
-    // 绘制
-    for (const p of projected) {
-      // 深度映射：远处暗小，近处亮大
-      const depthT = (p.z + this.radius) / (this.radius * 2); // 0=最近 1=最远
-      const clamped = Math.max(0, Math.min(1, depthT));
+    // 绘制粒子 + 连线拖尾
+    for (const proj of projected) {
+      const depthT = Math.max(0, Math.min(1, (proj.z + this.radius) / (this.radius * 2)));
+      const sz = proj.size * proj.scale * (2 - depthT * 0.8) * (0.8 + bass * 0.4);
+      if (sz < 0.15) continue;
 
-      const sz = p.size * p.scale * (1.8 - clamped * 0.8) * (0.8 + bass * 0.4);
-      if (sz < 0.2) continue;
+      const cr = Math.floor(55 + (1 - depthT) * 170);
+      const cg = Math.floor(100 + (1 - depthT) * 70 - bass * 40);
+      const cb = Math.floor(200 + (1 - depthT) * 55);
+      const a = proj.alpha * (1.3 - depthT * 0.8) * (0.6 + bass * 0.4);
+      if (a < 0.01) continue;
 
-      // 颜色：根据位置和深度
-      const hue = clamped * 0.6 + this.time * 0.05;
-      const cr = Math.floor(60 + (1 - clamped) * 160 + Math.sin(hue * 6) * 30);
-      const cg = Math.floor(100 + (1 - clamped) * 60 - bass * 40);
-      const cb = Math.floor(200 + (1 - clamped) * 55);
-
-      const a = p.alpha * (1.2 - clamped * 0.7) * (0.7 + bass * 0.3);
-      if (a < 0.02) continue;
-
-      tctx.beginPath();
-      tctx.arc(p.sx, p.sy, sz, 0, Math.PI * 2);
-      tctx.fillStyle = `rgba(${cr},${cg},${cb},${a})`;
-
-      // 近处粒子发光
-      if (clamped < 0.4) {
-        tctx.shadowBlur = 3 + (1 - clamped) * 6;
-        tctx.shadowColor = `rgba(${cr},${cg},${cb},${a * 0.4})`;
-      } else {
-        tctx.shadowBlur = 0;
+      // 连线拖尾（上一帧到当前位置）
+      if (proj.prevSx && proj.prevSy && playing) {
+        ctx.beginPath();
+        ctx.moveTo(proj.prevSx, proj.prevSy);
+        ctx.lineTo(proj.sx, proj.sy);
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},${a * 0.25})`;
+        ctx.lineWidth = sz * 0.5;
+        ctx.stroke();
       }
-      tctx.fill();
+
+      // 粒子点
+      ctx.beginPath();
+      ctx.arc(proj.sx, proj.sy, sz, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},${a})`;
+      if (depthT < 0.4) {
+        ctx.shadowBlur = 3 + (1 - depthT) * 5;
+        ctx.shadowColor = `rgba(${cr},${cg},${cb},${a * 0.3})`;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+      ctx.fill();
+
+      // 更新上一帧位置
+      proj.p.prevSx = proj.sx;
+      proj.p.prevSy = proj.sy;
     }
 
     // bass 爆发
@@ -295,8 +301,7 @@ export default class AudioVisualizer {
         this._burst.push({
           x: dx * r, y: dy * r, z: dz * r,
           vx: dx * spd, vy: dy * spd, vz: dz * spd,
-          size: 1.5 + Math.random() * 2,
-          alpha: 0.7, decay: 0.012,
+          size: 1.5 + Math.random() * 2, alpha: 0.7, decay: 0.012,
           color: `${Math.floor(120 + Math.random() * 135)},${Math.floor(80 + Math.random() * 80)},255`,
         });
       }
@@ -312,28 +317,23 @@ export default class AudioVisualizer {
 
       const r = this._rotate3D(p.x, p.y, p.z, this._rotX, this._rotY, this._rotZ);
       const scale = fov / (fov + r.z);
-      const sx = cx + r.x * scale;
-      const sy = cy + r.y * scale;
 
-      tctx.beginPath();
-      tctx.arc(sx, sy, p.size * scale, 0, Math.PI * 2);
-      tctx.fillStyle = `rgba(${p.color},${p.alpha})`;
-      tctx.shadowBlur = 8;
-      tctx.shadowColor = `rgba(${p.color},${p.alpha * 0.5})`;
-      tctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + r.x * scale, cy + r.y * scale, p.size * scale, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.5})`;
+      ctx.fill();
     }
 
-    tctx.shadowBlur = 0;
-
-    // 主 canvas：透明
-    ctx.clearRect(0, 0, W, H);
-    ctx.drawImage(trail, 0, 0);
+    ctx.shadowBlur = 0;
   }
 
   destroy() {
     this.stop();
     this.audio.pause();
     this.audio.src = '';
+    this.container.removeEventListener('mousemove', this._onMouseMove);
     if (this.source) { try { this.source.disconnect(); } catch {} }
     if (this.audioCtx.state !== 'closed') { try { this.audioCtx.close(); } catch {} }
     if (this.canvas?.parentNode) this.canvas.parentNode.removeChild(this.canvas);
