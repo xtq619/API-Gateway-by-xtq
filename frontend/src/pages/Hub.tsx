@@ -6,8 +6,8 @@ const sections = [
   {
     key: 'api',
     icon: Server,
-    title: 'API Gateway',
-    subtitle: 'LLM PROXY',
+    title: '模型广场',
+    subtitle: 'MODEL HUB',
     desc: '统一代理 OpenAI、Claude 等多模型 API，管理密钥、用量计费、速率限制',
     route: '/dashboard',
     iconBg: 'rgba(219,164,96,0.15)',
@@ -16,8 +16,8 @@ const sections = [
   {
     key: 'ai',
     icon: Bot,
-    title: 'AI 资讯',
-    subtitle: 'AI INSIGHT',
+    title: 'AI 早报',
+    subtitle: 'AI DAILY',
     desc: '每日精选 AI 行业新闻、论文、工具动态，保持前沿洞察',
     route: '/news',
     iconBg: 'rgba(100,160,220,0.15)',
@@ -26,8 +26,8 @@ const sections = [
   {
     key: 'battle',
     icon: Swords,
-    title: 'AI 对战',
-    subtitle: 'BATTLE',
+    title: '模型擂台',
+    subtitle: 'MODEL ARENA',
     desc: '两个 AI 模型围绕话题进行多轮辩论，裁判 AI 总结评判',
     route: '/battle',
     iconBg: 'rgba(220,120,100,0.15)',
