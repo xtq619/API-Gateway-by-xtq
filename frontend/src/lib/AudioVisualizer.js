@@ -238,45 +238,43 @@ export default class AudioVisualizer {
     this._drawShockwaves(ctx, cx, cy);
   }
 
-  // ─── Layer 1: 背景 ────────────────────────────────────
+  // ─── Layer 1: 背景（透明，不遮挡页面）────────────────
 
   _drawBackground(ctx, W, H, volume) {
-    // 深色底 + 随音量微变亮度
-    const brightness = Math.floor(12 + volume * 12);
-    ctx.fillStyle = `rgb(${brightness},${brightness},${Math.floor(brightness * 1.4)})`;
-    ctx.fillRect(0, 0, W, H);
-
-    // 中心暗角（vignette）
-    const vig = ctx.createRadialGradient(W / 2, H / 2, W * 0.15, W / 2, H / 2, W * 0.55);
-    vig.addColorStop(0, 'transparent');
-    vig.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = vig;
+    // 完全透明 — 只画一个极淡的中心光晕，增强"浮在页面上"的感觉
+    const glow = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.4);
+    const v = Math.min(volume, 1);
+    glow.addColorStop(0, `rgba(60,80,180,${0.04 + v * 0.04})`);
+    glow.addColorStop(0.5, `rgba(40,30,100,${0.02 + v * 0.02})`);
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, H);
   }
 
-  // ─── Layer 2: 星球 ────────────────────────────────────
+  // ─── Layer 2: 星球（能量核心）────────────────────────
 
   _drawPlanet(ctx, cx, cy, r, bass) {
     ctx.save();
 
-    // 外层 glow
-    ctx.shadowBlur = 40 + bass * 50;
-    ctx.shadowColor = 'rgba(80,100,255,0.5)';
+    // 最外层：柔和扩散光（替代黑色背景感）
+    const outerGlow = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 2.5);
+    outerGlow.addColorStop(0, `rgba(80,100,255,${0.12 + bass * 0.1})`);
+    outerGlow.addColorStop(0.4, `rgba(60,50,160,${0.06 + bass * 0.05})`);
+    outerGlow.addColorStop(1, 'transparent');
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.01)';
+    ctx.arc(cx, cy, r * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = outerGlow;
     ctx.fill();
-    ctx.shadowBlur = 0;
 
     // 球体渐变
     const grad = ctx.createRadialGradient(
       cx - r * 0.25, cy - r * 0.25, r * 0.05,
       cx, cy, r
     );
-    grad.addColorStop(0, `rgba(140,170,255,${0.6 + bass * 0.3})`);
-    grad.addColorStop(0.35, `rgba(80,80,220,${0.5 + bass * 0.2})`);
-    grad.addColorStop(0.7, `rgba(50,30,120,${0.4 + bass * 0.15})`);
-    grad.addColorStop(1, 'rgba(15,10,40,0.3)');
+    grad.addColorStop(0, `rgba(160,190,255,${0.7 + bass * 0.25})`);
+    grad.addColorStop(0.3, `rgba(100,100,240,${0.6 + bass * 0.2})`);
+    grad.addColorStop(0.65, `rgba(60,40,150,${0.5 + bass * 0.15})`);
+    grad.addColorStop(1, `rgba(30,20,80,${0.3 + bass * 0.1})`);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fillStyle = grad;
@@ -285,7 +283,7 @@ export default class AudioVisualizer {
     // 噪波纹理叠加
     if (this._noiseCanvas) {
       ctx.save();
-      ctx.globalAlpha = 0.08 + bass * 0.05;
+      ctx.globalAlpha = 0.06 + bass * 0.04;
       ctx.globalCompositeOperation = 'screen';
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -295,9 +293,9 @@ export default class AudioVisualizer {
     }
 
     // 高光点
-    const hlR = r * 0.3;
+    const hlR = r * 0.4;
     const hl = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx - r * 0.3, cy - r * 0.3, hlR);
-    hl.addColorStop(0, `rgba(200,220,255,${0.25 + bass * 0.15})`);
+    hl.addColorStop(0, `rgba(220,235,255,${0.3 + bass * 0.15})`);
     hl.addColorStop(1, 'transparent');
     ctx.beginPath();
     ctx.arc(cx - r * 0.3, cy - r * 0.3, hlR, 0, Math.PI * 2);
@@ -307,13 +305,14 @@ export default class AudioVisualizer {
     ctx.restore();
   }
 
-  // ─── Layer 3: 光晕 ────────────────────────────────────
+  // ─── Layer 3: 光晕（能量过渡层）──────────────────────
 
   _drawHalo(ctx, cx, cy, planetR, mid) {
-    const haloR = planetR * (1.3 + mid * 0.4);
-    const grad = ctx.createRadialGradient(cx, cy, planetR * 0.9, cx, cy, haloR);
-    grad.addColorStop(0, 'rgba(80,100,255,0.12)');
-    grad.addColorStop(0.5, 'rgba(120,60,200,0.06)');
+    const haloR = planetR * (1.5 + mid * 0.5);
+    const grad = ctx.createRadialGradient(cx, cy, planetR * 0.8, cx, cy, haloR);
+    grad.addColorStop(0, `rgba(100,120,255,${0.15 + mid * 0.1})`);
+    grad.addColorStop(0.4, `rgba(130,70,220,${0.08 + mid * 0.06})`);
+    grad.addColorStop(0.7, `rgba(80,40,160,${0.04})`);
     grad.addColorStop(1, 'transparent');
     ctx.beginPath();
     ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
@@ -328,25 +327,42 @@ export default class AudioVisualizer {
     ctx.translate(cx, cy);
     ctx.rotate(this.rotation);
 
+    // ① 旋转偏移：把低频从起点移开，避免左下永远最高
+    const offset = Math.floor(BANDS / 4);
+
+    // ② 邻域平滑 + ③ 能量包络
+    const smoothed = new Float32Array(BANDS);
+    for (let i = 0; i < BANDS; i++) {
+      const prev = bands[(i - 1 + BANDS) % BANDS];
+      const curr = bands[i];
+      const next = bands[(i + 1) % BANDS];
+      const avg = (prev + curr + next) / 3;
+      // sin 包络：两端收敛，中间饱满
+      const envelope = Math.sin((i / BANDS) * Math.PI);
+      smoothed[i] = avg * envelope;
+    }
+
     const step = Math.PI * 2 / BANDS;
 
     for (let i = 0; i < BANDS; i++) {
-      const val = Math.pow(bands[i], 0.6); // 轻度压缩
-      if (val < 0.02) continue;
+      // 应用旋转偏移
+      const si = (i + offset) % BANDS;
+      const val = Math.pow(smoothed[si], 0.55);
+      if (val < 0.015) continue;
 
       // 不均匀：低频更粗更短，高频更细更长
-      const t = i / BANDS; // 0=低频 1=高频
-      const thickness = 4.5 - t * 3; // 低频 4.5 → 高频 1.5
-      const maxH = this.baseRadius * (0.8 + t * 1.4); // 低频短 → 高频长
+      const t = i / BANDS;
+      const thickness = 4.5 - t * 3;
+      const maxH = this.baseRadius * (0.7 + t * 1.6);
       const barH = val * maxH;
 
       const angle = step * i - Math.PI / 2;
 
-      // 颜色：蓝 → 紫 → 粉 → 橙
-      const r = Math.floor(68 + t * 187 + val * 40);
-      const g = Math.floor(136 - t * 68 - val * 20);
-      const b = Math.floor(255 - t * 150 + val * 30);
-      const alpha = 0.5 + val * 0.5;
+      // 颜色沿角度渐变：蓝 → 紫 → 粉
+      const r = Math.floor(60 + t * 170 + val * 30);
+      const g = Math.floor(130 - t * 80);
+      const b = Math.floor(255 - t * 120 + val * 20);
+      const alpha = 0.4 + val * 0.6;
 
       const x1 = Math.cos(angle) * planetR;
       const y1 = Math.sin(angle) * planetR;
@@ -359,7 +375,7 @@ export default class AudioVisualizer {
       ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
       ctx.lineWidth = thickness;
       ctx.lineCap = 'round';
-      ctx.shadowBlur = 4 + val * 10;
+      ctx.shadowBlur = 5 + val * 12;
       ctx.shadowColor = `rgb(${r},${g},${b})`;
       ctx.stroke();
     }
