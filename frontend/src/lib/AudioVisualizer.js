@@ -1,34 +1,17 @@
 /**
- * AudioVisualizer — "Sound Planet" 音频可视化模块
+ * AudioVisualizer — 粒子能量环
  *
- * 分层渲染：背景 → 星球 → 光晕 → 频谱 → 冲击波
- * 所有动画由音频数据驱动
- *
- * 用法：
- *   const vis = new AudioVisualizer({ container, width, height })
- *   vis.loadFile(file);  vis.play();  vis.start();
- *   vis.startRecord();   vis.stopRecord().then(blob => ...)
- *   vis.destroy();
+ * 无中心星球，透明背景，能量环 + 双粒子系统
  */
 export default class AudioVisualizer {
-  /**
-   * @param {Object} options
-   * @param {HTMLElement} options.container
-   * @param {number}      [options.width=600]
-   * @param {number}      [options.height=600]
-   * @param {number}      [options.fftSize=512]
-   * @param {number}      [options.smoothingFactor=0.8]
-   * @param {number}      [options.baseRadius=70]
-   */
   constructor(options) {
     this.container = options.container;
     this.width = options.width || 600;
     this.height = options.height || 600;
     this.fftSize = options.fftSize || 512;
-    this.smoothingFactor = options.smoothingFactor ?? 0.8;
-    this.baseRadius = options.baseRadius || 70;
+    this.smoothingFactor = options.smoothingFactor ?? 0.82;
+    this.baseRadius = options.baseRadius || 110;
 
-    // internals
     this.canvas = null;
     this.ctx = null;
     this.audioCtx = null;
@@ -41,35 +24,13 @@ export default class AudioVisualizer {
     this.recordedChunks = [];
     this.recording = false;
 
-    // planet state
     this.rotation = 0;
     this._prevBass = 0;
-    this._shockwaves = [];
-    this._particles = [];
-    this._PARTICLE_MAX = 600;
-
-    // offscreen noise canvas for planet texture
-    this._noiseCanvas = null;
-    this._initNoise();
+    this._ringParticles = [];
+    this._burstParticles = [];
 
     this._initCanvas();
     this._initAudio();
-  }
-
-  // ─── 噪波纹理 ─────────────────────────────────────────
-  _initNoise() {
-    const size = 128;
-    const c = document.createElement('canvas');
-    c.width = size; c.height = size;
-    const cx = c.getContext('2d');
-    const img = cx.createImageData(size, size);
-    for (let i = 0; i < img.data.length; i += 4) {
-      const v = Math.random() * 255;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
-      img.data[i + 3] = 30; // very subtle
-    }
-    cx.putImageData(img, 0, 0);
-    this._noiseCanvas = c;
   }
 
   // ─── Canvas ───────────────────────────────────────────
@@ -79,6 +40,7 @@ export default class AudioVisualizer {
     this.canvas.height = this.height;
     this.canvas.style.width = this.width + 'px';
     this.canvas.style.height = this.height + 'px';
+    this.canvas.style.background = 'transparent';
     this.ctx = this.canvas.getContext('2d');
     this.container.appendChild(this.canvas);
   }
@@ -90,15 +52,12 @@ export default class AudioVisualizer {
     this.analyser.fftSize = this.fftSize;
     this.analyser.smoothingTimeConstant = 0.8;
     this.analyser.connect(this.audioCtx.destination);
-
     this.audio = new Audio();
     this.audio.crossOrigin = 'anonymous';
-
-    const bufLen = this.analyser.frequencyBinCount;
-    this.smoothedData = new Float32Array(bufLen);
+    this.smoothedData = new Float32Array(this.analyser.frequencyBinCount);
   }
 
-  // ─── 公开 API ─────────────────────────────────────────
+  // ─── API ──────────────────────────────────────────────
 
   loadFile(file) {
     if (this.source) { this.source.disconnect(); this.source = null; }
@@ -135,18 +94,16 @@ export default class AudioVisualizer {
     this.recordedChunks = [];
     const stream = this.canvas.captureStream(30);
     try {
-      const audioDest = this.audioCtx.createMediaStreamDestination();
-      this.analyser.connect(audioDest);
-      audioDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
-      this._audioDest = audioDest;
+      const dest = this.audioCtx.createMediaStreamDestination();
+      this.analyser.connect(dest);
+      dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+      this._audioDest = dest;
     } catch {}
     this.recorder = new MediaRecorder(stream, {
       mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
         ? 'video/webm;codecs=vp9' : 'video/webm',
     });
-    this.recorder.ondataavailable = e => {
-      if (e.data.size > 0) this.recordedChunks.push(e.data);
-    };
+    this.recorder.ondataavailable = e => { if (e.data.size) this.recordedChunks.push(e.data); };
     this.recorder.start(100);
     this.recording = true;
   }
@@ -166,7 +123,7 @@ export default class AudioVisualizer {
 
   getDownloadURL(blob) { return URL.createObjectURL(blob); }
 
-  // ─── 主渲染循环 ───────────────────────────────────────
+  // ─── 主循环 ───────────────────────────────────────────
 
   _draw() {
     this.rafId = requestAnimationFrame(() => this._draw());
@@ -182,232 +139,239 @@ export default class AudioVisualizer {
       smoothedData[i] = smoothedData[i] * f + raw[i] * (1 - f);
     }
 
-    // 分频段 — 使用对数分区，低频分辨率高
+    // 分频段（对数分区）
     const BANDS = 64;
     const bands = new Float32Array(BANDS);
     for (let b = 0; b < BANDS; b++) {
-      // 对数映射：低频占更多 bin
       const lo = Math.floor(Math.pow(b / BANDS, 2) * bufLen);
       const hi = Math.floor(Math.pow((b + 1) / BANDS, 2) * bufLen);
-      let sum = 0; let count = 0;
-      for (let j = lo; j < Math.min(hi, bufLen); j++) { sum += smoothedData[j]; count++; }
-      bands[b] = count > 0 ? sum / count / 255 : 0;
+      let sum = 0, cnt = 0;
+      for (let j = lo; j < Math.min(hi, bufLen); j++) { sum += smoothedData[j]; cnt++; }
+      bands[b] = cnt > 0 ? sum / cnt / 255 : 0;
     }
 
-    // bass / mid / treble / volume
-    let bass = 0; for (let i = 0; i < 5; i++) bass += bands[i]; bass /= 5;
-    let mid = 0; for (let i = 10; i < 35; i++) mid += bands[i]; mid /= 25;
-    let treble = 0; for (let i = 40; i < BANDS; i++) treble += bands[i]; treble /= (BANDS - 40);
-    let volume = 0; for (let i = 0; i < BANDS; i++) volume += bands[i]; volume /= BANDS;
-
-    // 冲击波触发
-    if (bass > 0.55 && this._prevBass <= 0.55) {
-      this._shockwaves.push({ radius: this.baseRadius * 1.2, alpha: 0.7, speed: 3 + bass * 4 });
-    }
-    this._prevBass = bass;
-
-    // 更新冲击波
-    for (let i = this._shockwaves.length - 1; i >= 0; i--) {
-      const sw = this._shockwaves[i];
-      sw.radius += sw.speed;
-      sw.alpha -= 0.012;
-      if (sw.alpha <= 0) this._shockwaves.splice(i, 1);
+    // 邻域平滑
+    const SPREAD = 2;
+    const smooth = new Float32Array(BANDS);
+    for (let i = 0; i < BANDS; i++) {
+      let s = 0;
+      for (let j = -SPREAD; j <= SPREAD; j++) s += bands[(i + j + BANDS) % BANDS];
+      smooth[i] = s / (SPREAD * 2 + 1);
     }
 
-    // 缓慢旋转
+    // 音频指标
+    let bass = 0; for (let i = 0; i < 5; i++) bass += smooth[i]; bass /= 5;
+    let mid = 0; for (let i = 10; i < 35; i++) mid += smooth[i]; mid /= 25;
+    let volume = 0; for (let i = 0; i < BANDS; i++) volume += smooth[i]; volume /= BANDS;
+
+    // 旋转
     this.rotation += 0.0008;
 
     const cx = W / 2;
     const cy = H / 2;
-    const planetR = this.baseRadius * (1 + bass * 0.35);
+    const playing = !this.audio.paused;
 
-    // 清空
+    // 清空（完全透明）
     ctx.clearRect(0, 0, W, H);
 
-    // ── Layer 1: 背景 ──
-    this._drawBackground(ctx, W, H, volume);
+    // 中心能量空腔
+    this._drawCore(ctx, cx, cy, volume, mid);
 
-    // ── Layer 2: 星球 ──
-    this._drawPlanet(ctx, cx, cy, planetR, bass);
+    // 能量环
+    this._drawRing(ctx, cx, cy, smooth, BANDS, playing);
 
-    // ── Layer 3: 光晕 ──
-    this._drawHalo(ctx, cx, cy, planetR, mid);
-
-    // ── Layer 4: 粒子 ──
-    this._updateParticles(bands, BANDS, cx, cy, planetR);
-    this._drawParticles(ctx, cx, cy);
-
-    // ── Layer 5: 冲击波 ──
-    this._drawShockwaves(ctx, cx, cy);
+    // 更新 & 绘制粒子
+    if (playing) {
+      this._spawnRingParticles(smooth, BANDS, cx, cy);
+      if (bass > 0.5 && this._prevBass <= 0.5) {
+        this._spawnBurst(cx, cy, bass);
+      }
+    }
+    this._prevBass = bass;
+    this._updateAndDrawParticles(ctx, cx, cy);
   }
 
-  // ─── Layer 1: 背景（透明，不遮挡页面）────────────────
+  // ─── 中心空腔 ─────────────────────────────────────────
 
-  _drawBackground(ctx, W, H, volume) {
-    // 完全透明 — 只画一个极淡的中心光晕，增强"浮在页面上"的感觉
-    const glow = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.4);
+  _drawCore(ctx, cx, cy, volume, mid) {
+    const r = this.baseRadius * 0.85;
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     const v = Math.min(volume, 1);
-    glow.addColorStop(0, `rgba(60,80,180,${0.04 + v * 0.04})`);
-    glow.addColorStop(0.5, `rgba(40,30,100,${0.02 + v * 0.02})`);
+    glow.addColorStop(0, `rgba(60,80,200,${0.02 + v * 0.03})`);
+    glow.addColorStop(0.4, `rgba(80,60,180,${0.03 + mid * 0.04})`);
+    glow.addColorStop(0.7, `rgba(60,40,160,${0.02 + v * 0.02})`);
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // ─── Layer 2: 星球（能量核心）────────────────────────
-
-  _drawPlanet(ctx, cx, cy, r, bass) {
-    ctx.save();
-
-    // 最外层：柔和扩散光（替代黑色背景感）
-    const outerGlow = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 2.5);
-    outerGlow.addColorStop(0, `rgba(80,100,255,${0.12 + bass * 0.1})`);
-    outerGlow.addColorStop(0.4, `rgba(60,50,160,${0.06 + bass * 0.05})`);
-    outerGlow.addColorStop(1, 'transparent');
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = outerGlow;
-    ctx.fill();
-
-    // 球体渐变
-    const grad = ctx.createRadialGradient(
-      cx - r * 0.25, cy - r * 0.25, r * 0.05,
-      cx, cy, r
-    );
-    grad.addColorStop(0, `rgba(160,190,255,${0.7 + bass * 0.25})`);
-    grad.addColorStop(0.3, `rgba(100,100,240,${0.6 + bass * 0.2})`);
-    grad.addColorStop(0.65, `rgba(60,40,150,${0.5 + bass * 0.15})`);
-    grad.addColorStop(1, `rgba(30,20,80,${0.3 + bass * 0.1})`);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // 噪波纹理叠加
-    if (this._noiseCanvas) {
-      ctx.save();
-      ctx.globalAlpha = 0.06 + bass * 0.04;
-      ctx.globalCompositeOperation = 'screen';
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(this._noiseCanvas, cx - r, cy - r, r * 2, r * 2);
-      ctx.restore();
-    }
-
-    // 高光点
-    const hlR = r * 0.4;
-    const hl = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx - r * 0.3, cy - r * 0.3, hlR);
-    hl.addColorStop(0, `rgba(220,235,255,${0.3 + bass * 0.15})`);
-    hl.addColorStop(1, 'transparent');
-    ctx.beginPath();
-    ctx.arc(cx - r * 0.3, cy - r * 0.3, hlR, 0, Math.PI * 2);
-    ctx.fillStyle = hl;
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  // ─── Layer 3: 光晕（能量过渡层）──────────────────────
-
-  _drawHalo(ctx, cx, cy, planetR, mid) {
-    const haloR = planetR * (1.5 + mid * 0.5);
-    const grad = ctx.createRadialGradient(cx, cy, planetR * 0.8, cx, cy, haloR);
-    grad.addColorStop(0, `rgba(100,120,255,${0.15 + mid * 0.1})`);
-    grad.addColorStop(0.4, `rgba(130,70,220,${0.08 + mid * 0.06})`);
-    grad.addColorStop(0.7, `rgba(80,40,160,${0.04})`);
-    grad.addColorStop(1, 'transparent');
-    ctx.beginPath();
-    ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
     ctx.fill();
   }
 
-  // ─── Layer 4: 粒子系统 ────────────────────────────────
+  // ─── 能量环 ───────────────────────────────────────────
 
-  _updateParticles(bands, BANDS, cx, cy, planetR) {
-    const step = Math.PI * 2 / BANDS;
+  _drawRing(ctx, cx, cy, bands, BANDS, playing) {
+    if (!playing) return;
 
-    // 每个频段生成粒子
-    for (let i = 0; i < BANDS; i++) {
-      const val = Math.pow(bands[i], 0.7);
-      if (val < 0.08) continue;
-
-      // 根据强度决定每帧生成几个粒子
-      const count = val > 0.5 ? 3 : val > 0.25 ? 2 : 1;
-      for (let n = 0; n < count; n++) {
-        if (this._particles.length >= this._PARTICLE_MAX) break;
-
-        const angle = step * i + (Math.random() - 0.5) * step * 0.8;
-        const speed = 0.5 + val * 2.5 + Math.random() * 0.8;
-        const t = i / BANDS;
-
-        // 颜色：蓝 → 紫 → 粉
-        const cr = Math.floor(60 + t * 170);
-        const cg = Math.floor(130 - t * 80);
-        const cb = Math.floor(255 - t * 120);
-
-        this._particles.push({
-          angle,
-          dist: planetR + Math.random() * 5,
-          speed,
-          size: 1.2 + val * 2.5 + Math.random() * 0.8,
-          alpha: 0.6 + val * 0.4,
-          decay: 0.008 + Math.random() * 0.006,
-          color: `${cr},${cg},${cb}`,
-        });
-      }
-    }
-
-    // 更新已有粒子
-    for (let i = this._particles.length - 1; i >= 0; i--) {
-      const p = this._particles[i];
-      p.dist += p.speed;
-      p.alpha -= p.decay;
-      p.size *= 0.997;
-      if (p.alpha <= 0 || p.size < 0.3) {
-        this._particles.splice(i, 1);
-      }
-    }
-  }
-
-  _drawParticles(ctx, cx, cy) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(this.rotation);
 
-    for (const p of this._particles) {
-      const x = Math.cos(p.angle) * p.dist;
-      const y = Math.sin(p.angle) * p.dist;
+    const step = Math.PI * 2 / BANDS;
+    const R = this.baseRadius;
+
+    // 绘制弧段连接成环
+    for (let i = 0; i < BANDS; i++) {
+      const val = Math.pow(bands[i], 0.65);
+      if (val < 0.01) continue;
+
+      const t = i / BANDS;
+      const angle = step * i - Math.PI / 2;
+      const nextAngle = step * (i + 1) - Math.PI / 2;
+
+      // 环半径随频谱波动
+      const r1 = R + val * R * 0.6;
+      const nextVal = Math.pow(bands[(i + 1) % BANDS], 0.65);
+      const r2 = R + nextVal * R * 0.6;
+
+      // 颜色：蓝 → 紫 → 粉
+      const cr = Math.floor(50 + t * 180 + val * 30);
+      const cg = Math.floor(130 - t * 70);
+      const cb = Math.floor(255 - t * 110);
+      const alpha = 0.35 + val * 0.65;
+
+      const x1 = Math.cos(angle) * r1;
+      const y1 = Math.sin(angle) * r1;
+      const x2 = Math.cos(nextAngle) * r2;
+      const y2 = Math.sin(nextAngle) * r2;
 
       ctx.beginPath();
-      ctx.arc(x, y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
-      ctx.shadowBlur = 6 + p.size * 2;
-      ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.8})`;
-      ctx.fill();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha})`;
+      ctx.lineWidth = 2.5 + val * 3.5;
+      ctx.lineCap = 'round';
+      ctx.shadowBlur = 6 + val * 14;
+      ctx.shadowColor = `rgba(${cr},${cg},${cb},${alpha * 0.7})`;
+      ctx.stroke();
     }
+
+    // 内侧微弱基准环
+    ctx.beginPath();
+    ctx.arc(0, 0, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(80,100,220,0.06)';
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = 'rgba(80,100,220,0.1)';
+    ctx.stroke();
 
     ctx.shadowBlur = 0;
     ctx.restore();
   }
 
-  // ─── Layer 5: 冲击波 ──────────────────────────────────
+  // ─── 环形粒子（持续）──────────────────────────────────
 
-  _drawShockwaves(ctx, cx, cy) {
-    for (const sw of this._shockwaves) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, sw.radius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(100,140,255,${sw.alpha})`;
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = `rgba(80,120,255,${sw.alpha})`;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+  _spawnRingParticles(bands, BANDS, cx, cy) {
+    const step = Math.PI * 2 / BANDS;
+
+    for (let i = 0; i < BANDS; i += 2) {
+      const val = bands[i];
+      if (val < 0.1 || this._ringParticles.length >= 350) continue;
+      if (Math.random() > val * 0.6) continue;
+
+      const angle = step * i + (Math.random() - 0.5) * step;
+      const r = this.baseRadius + Math.pow(val, 0.65) * this.baseRadius * 0.6;
+      const t = i / BANDS;
+
+      this._ringParticles.push({
+        x: cx + Math.cos(angle) * r,
+        y: cy + Math.sin(angle) * r,
+        vx: Math.cos(angle) * (0.2 + Math.random() * 0.3),
+        vy: Math.sin(angle) * (0.2 + Math.random() * 0.3),
+        // 切线方向漂移
+        tx: -Math.sin(angle) * (0.15 + Math.random() * 0.2),
+        ty: Math.cos(angle) * (0.15 + Math.random() * 0.2),
+        size: 0.8 + val * 1.8,
+        alpha: 0.4 + val * 0.5,
+        decay: 0.005 + Math.random() * 0.004,
+        color: this._getColor(t, val),
+      });
     }
   }
 
-  // ─── 工具 ─────────────────────────────────────────────
+  // ─── 外扩粒子（bass 触发）────────────────────────────
+
+  _spawnBurst(cx, cy, bass) {
+    const count = 12 + Math.floor(bass * 18);
+    for (let n = 0; n < count; n++) {
+      if (this._burstParticles.length >= 250) break;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 3 + bass * 2;
+      const t = Math.random();
+      this._burstParticles.push({
+        x: cx + Math.cos(angle) * this.baseRadius,
+        y: cy + Math.sin(angle) * this.baseRadius,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 1.5 + Math.random() * 2.5,
+        alpha: 0.7 + Math.random() * 0.3,
+        decay: 0.012 + Math.random() * 0.008,
+        color: this._getColor(t, bass),
+      });
+    }
+  }
+
+  // ─── 粒子更新 & 绘制 ──────────────────────────────────
+
+  _updateAndDrawParticles(ctx, cx, cy) {
+    // 环形粒子
+    for (let i = this._ringParticles.length - 1; i >= 0; i--) {
+      const p = this._ringParticles[i];
+      p.x += p.vx + p.tx + (Math.random() - 0.5) * 0.2;
+      p.y += p.vy + p.ty + (Math.random() - 0.5) * 0.2;
+      p.alpha -= p.decay;
+      p.size *= 0.998;
+      if (p.alpha <= 0 || p.size < 0.2) { this._ringParticles.splice(i, 1); continue; }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+      ctx.shadowBlur = 5;
+      ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.6})`;
+      ctx.fill();
+    }
+
+    // 外扩粒子
+    for (let i = this._burstParticles.length - 1; i >= 0; i--) {
+      const p = this._burstParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.alpha -= p.decay;
+      p.size *= 0.995;
+      if (p.alpha <= 0 || p.size < 0.2) { this._burstParticles.splice(i, 1); continue; }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.7})`;
+      ctx.fill();
+    }
+
+    ctx.shadowBlur = 0;
+  }
+
+  // ─── 颜色工具 ─────────────────────────────────────────
+
+  _getColor(t, val) {
+    const r = Math.floor(50 + t * 180 + val * 30);
+    const g = Math.floor(130 - t * 70);
+    const b = Math.floor(255 - t * 110);
+    return `${r},${g},${b}`;
+  }
+
+  // ─── 销毁 ─────────────────────────────────────────────
 
   destroy() {
     this.stop();
@@ -415,8 +379,6 @@ export default class AudioVisualizer {
     this.audio.src = '';
     if (this.source) { try { this.source.disconnect(); } catch {} }
     if (this.audioCtx.state !== 'closed') { try { this.audioCtx.close(); } catch {} }
-    if (this.canvas && this.canvas.parentNode) {
-      this.canvas.parentNode.removeChild(this.canvas);
-    }
+    if (this.canvas?.parentNode) this.canvas.parentNode.removeChild(this.canvas);
   }
 }

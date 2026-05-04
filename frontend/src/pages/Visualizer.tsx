@@ -21,7 +21,7 @@ export default function Visualizer() {
       height: 560,
       fftSize: 512,
       smoothingFactor: 0.82,
-      baseRadius: 80,
+      baseRadius: 110,
     });
     vis.start();
     visRef.current = vis;
