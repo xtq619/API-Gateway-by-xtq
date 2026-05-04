@@ -1,8 +1,67 @@
 /**
- * AudioVisualizer — 粒子能量环
+ * AudioVisualizer — 粒子流体云
  *
- * 无中心星球，透明背景，能量环 + 双粒子系统
+ * 噪声驱动 + 音频响应 + 拖尾轨迹
+ * 看起来像"声音形成的流动物质"
  */
+
+// ─── 紧凑 Simplex Noise（3D）────────────────────────────
+class SimplexNoise {
+  constructor() {
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+    this.perm = new Uint8Array(512);
+    this.permMod = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) {
+      this.perm[i] = p[i & 255];
+      this.permMod[i] = this.perm[i] % 12;
+    }
+    this.grad3 = [
+      [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+      [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+      [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1],
+    ];
+  }
+
+  noise3D(x, y, z) {
+    const { perm, permMod, grad3 } = this;
+    const F3 = 1 / 3, G3 = 1 / 6;
+    const s = (x + y + z) * F3;
+    const i = Math.floor(x + s), j = Math.floor(y + s), k = Math.floor(z + s);
+    const t = (i + j + k) * G3;
+    const X0 = x - (i - t), Y0 = y - (j - t), Z0 = z - (k - t);
+    let i1, j1, k1, i2, j2, k2;
+    if (X0 >= Y0) {
+      if (Y0 >= Z0) { i1=1;j1=0;k1=0;i2=1;j2=1;k2=0; }
+      else if (X0 >= Z0) { i1=1;j1=0;k1=0;i2=1;j2=0;k2=1; }
+      else { i1=0;j1=0;k1=1;i2=1;j2=0;k2=1; }
+    } else {
+      if (Y0 < Z0) { i1=0;j1=0;k1=1;i2=0;j2=1;k2=1; }
+      else if (X0 < Z0) { i1=0;j1=1;k1=0;i2=0;j2=1;k2=1; }
+      else { i1=0;j1=1;k1=0;i2=1;j2=1;k2=0; }
+    }
+    const x1=X0-i1+G3, y1=Y0-j1+G3, z1=Z0-k1+G3;
+    const x2=X0-i2+2*G3, y2=Y0-j2+2*G3, z2=Z0-k2+2*G3;
+    const x3=X0-1+3*G3, y3=Y0-1+3*G3, z3=Z0-1+3*G3;
+    const ii=i&255, jj=j&255, kk=k&255;
+    const dot = (g, x, y, z) => g[0]*x + g[1]*y + g[2]*z;
+    let n0=0, n1=0, n2=0, n3=0;
+    let t0 = 0.6 - X0*X0 - Y0*Y0 - Z0*Z0;
+    if (t0 > 0) { t0*=t0; n0 = t0*t0 * dot(grad3[permMod[ii+perm[jj+perm[kk]]]], X0, Y0, Z0); }
+    let t1 = 0.6 - x1*x1 - y1*y1 - z1*z1;
+    if (t1 > 0) { t1*=t1; n1 = t1*t1 * dot(grad3[permMod[ii+i1+perm[jj+j1+perm[kk+k1]]]], x1, y1, z1); }
+    let t2 = 0.6 - x2*x2 - y2*y2 - z2*z2;
+    if (t2 > 0) { t2*=t2; n2 = t2*t2 * dot(grad3[permMod[ii+i2+perm[jj+j2+perm[kk+k2]]]], x2, y2, z2); }
+    let t3 = 0.6 - x3*x3 - y3*y3 - z3*z3;
+    if (t3 > 0) { t3*=t3; n3 = t3*t3 * dot(grad3[permMod[ii+1+perm[jj+1+perm[kk+1]]]], x3, y3, z3); }
+    return 32 * (n0 + n1 + n2 + n3);
+  }
+}
+
 export default class AudioVisualizer {
   constructor(options) {
     this.container = options.container;
@@ -10,7 +69,8 @@ export default class AudioVisualizer {
     this.height = options.height || 600;
     this.fftSize = options.fftSize || 512;
     this.smoothingFactor = options.smoothingFactor ?? 0.82;
-    this.baseRadius = options.baseRadius || 110;
+    this.baseRadius = options.baseRadius || 120;
+    this.particleCount = options.particleCount || 1500;
 
     this.canvas = null;
     this.ctx = null;
@@ -24,12 +84,14 @@ export default class AudioVisualizer {
     this.recordedChunks = [];
     this.recording = false;
 
-    this.rotation = 0;
+    this.noise = new SimplexNoise();
+    this.time = 0;
     this._prevBass = 0;
-    this._ringParticles = [];
+    this._particles = [];
     this._burstParticles = [];
 
     this._initCanvas();
+    this._initParticles();
     this._initAudio();
   }
 
@@ -40,9 +102,31 @@ export default class AudioVisualizer {
     this.canvas.height = this.height;
     this.canvas.style.width = this.width + 'px';
     this.canvas.style.height = this.height + 'px';
-    this.canvas.style.background = 'transparent';
     this.ctx = this.canvas.getContext('2d');
     this.container.appendChild(this.canvas);
+
+    // 初始填充深色底（只画一次，之后用拖尾覆盖）
+    this.ctx.fillStyle = 'rgba(8,8,16,1)';
+    this.ctx.fillRect(0, 0, this.width, this.height);
+  }
+
+  // ─── 粒子初始化：从圆形分布 ────────────────────────────
+  _initParticles() {
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    this._particles = [];
+    for (let i = 0; i < this.particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = this.baseRadius + (Math.random() - 0.5) * this.baseRadius * 0.6;
+      this._particles.push({
+        baseX: cx + Math.cos(angle) * r,
+        baseY: cy + Math.sin(angle) * r,
+        x: 0, y: 0,
+        size: 0.6 + Math.random() * 1.4,
+        alpha: 0.15 + Math.random() * 0.35,
+        hueShift: Math.random(), // 颜色微调
+      });
+    }
   }
 
   // ─── Audio ────────────────────────────────────────────
@@ -71,21 +155,10 @@ export default class AudioVisualizer {
     }, { once: true });
   }
 
-  play() {
-    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
-    this.audio.play();
-  }
-
+  play() { if (this.audioCtx.state === 'suspended') this.audioCtx.resume(); this.audio.play(); }
   pause() { this.audio.pause(); }
-
-  start() {
-    if (this.rafId) return;
-    this._draw();
-  }
-
-  stop() {
-    if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
-  }
+  start() { if (!this.rafId) this._draw(); }
+  stop() { if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; } }
 
   // ─── 录制 ─────────────────────────────────────────────
 
@@ -128,7 +201,7 @@ export default class AudioVisualizer {
   _draw() {
     this.rafId = requestAnimationFrame(() => this._draw());
 
-    const { ctx, analyser, smoothedData, width: W, height: H } = this;
+    const { ctx, analyser, smoothedData, width: W, height: H, noise } = this;
     const bufLen = analyser.frequencyBinCount;
     const raw = new Uint8Array(bufLen);
     analyser.getByteFrequencyData(raw);
@@ -139,236 +212,119 @@ export default class AudioVisualizer {
       smoothedData[i] = smoothedData[i] * f + raw[i] * (1 - f);
     }
 
-    // 分频段（对数分区）
-    const BANDS = 64;
-    const bands = new Float32Array(BANDS);
-    for (let b = 0; b < BANDS; b++) {
-      const lo = Math.floor(Math.pow(b / BANDS, 2) * bufLen);
-      const hi = Math.floor(Math.pow((b + 1) / BANDS, 2) * bufLen);
-      let sum = 0, cnt = 0;
-      for (let j = lo; j < Math.min(hi, bufLen); j++) { sum += smoothedData[j]; cnt++; }
-      bands[b] = cnt > 0 ? sum / cnt / 255 : 0;
-    }
-
-    // 邻域平滑
-    const SPREAD = 2;
-    const smooth = new Float32Array(BANDS);
-    for (let i = 0; i < BANDS; i++) {
-      let s = 0;
-      for (let j = -SPREAD; j <= SPREAD; j++) s += bands[(i + j + BANDS) % BANDS];
-      smooth[i] = s / (SPREAD * 2 + 1);
+    // 分频段
+    const bands = new Float32Array(64);
+    for (let b = 0; b < 64; b++) {
+      const lo = Math.floor(Math.pow(b / 64, 2) * bufLen);
+      const hi = Math.floor(Math.pow((b + 1) / 64, 2) * bufLen);
+      let s = 0, c = 0;
+      for (let j = lo; j < Math.min(hi, bufLen); j++) { s += smoothedData[j]; c++; }
+      bands[b] = c > 0 ? s / c / 255 : 0;
     }
 
     // 音频指标
-    let bass = 0; for (let i = 0; i < 5; i++) bass += smooth[i]; bass /= 5;
-    let mid = 0; for (let i = 10; i < 35; i++) mid += smooth[i]; mid /= 25;
-    let volume = 0; for (let i = 0; i < BANDS; i++) volume += smooth[i]; volume /= BANDS;
+    let bass = 0; for (let i = 0; i < 5; i++) bass += bands[i]; bass /= 5;
+    let mid = 0; for (let i = 10; i < 35; i++) mid += bands[i]; mid /= 25;
+    let high = 0; for (let i = 40; i < 64; i++) high += bands[i]; high /= 24;
 
-    // 旋转
-    this.rotation += 0.0008;
+    const playing = !this.audio.paused;
+    this.time += 0.008;
+
+    // ── 拖尾（关键：不是 clearRect，而是半透明覆盖）──
+    ctx.fillStyle = playing
+      ? 'rgba(8,8,16,0.06)'
+      : 'rgba(8,8,16,0.15)';
+    ctx.fillRect(0, 0, W, H);
 
     const cx = W / 2;
     const cy = H / 2;
-    const playing = !this.audio.paused;
 
-    // 清空（完全透明）
-    ctx.clearRect(0, 0, W, H);
+    // ── 噪声驱动参数 ──
+    const noiseScale = 0.004 + mid * 0.003;
+    const amplitude = 20 + bass * 80 + mid * 30;
+    const jitter = high * 4;
 
-    // 中心能量空腔
-    this._drawCore(ctx, cx, cy, volume, mid);
+    // ── 粒子更新 & 绘制 ──
+    for (const p of this._particles) {
+      // 3D 噪声：x, y, time → 连续流动
+      const n = noise.noise3D(p.baseX * noiseScale, p.baseY * noiseScale, this.time);
 
-    // 能量环
-    this._drawRing(ctx, cx, cy, smooth, BANDS, playing);
+      // 极角方向的噪声（让粒子沿切线流动）
+      const angle = Math.atan2(p.baseY - cy, p.baseX - cx);
+      const flowN = noise.noise3D(
+        Math.cos(angle) * 0.5 + this.time * 0.3,
+        Math.sin(angle) * 0.5,
+        this.time * 0.5
+      );
 
-    // 更新 & 绘制粒子
-    if (playing) {
-      this._spawnRingParticles(smooth, BANDS, cx, cy);
-      if (bass > 0.5 && this._prevBass <= 0.5) {
-        this._spawnBurst(cx, cy, bass);
+      // 位移 = 噪声 * 振幅 + 音频抖动
+      const dx = n * amplitude + flowN * amplitude * 0.4;
+      const dy = n * amplitude * 0.8 + flowN * amplitude * 0.5;
+
+      // 高频抖动
+      const jx = (Math.random() - 0.5) * jitter;
+      const jy = (Math.random() - 0.5) * jitter;
+
+      p.x = p.baseX + dx + jx;
+      p.y = p.baseY + dy + jy;
+
+      // 颜色：蓝 → 紫 → 粉，根据到中心的距离
+      const dist = Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2);
+      const t = Math.min(dist / (this.baseRadius * 2), 1);
+      const cr = Math.floor(60 + t * 170 + p.hueShift * 20);
+      const cg = Math.floor(140 - t * 90 - bass * 30);
+      const cb = Math.floor(255 - t * 100);
+
+      // alpha 随音量增强
+      const a = p.alpha * (0.6 + bass * 0.4 + mid * 0.2);
+
+      // 绘制
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (0.8 + bass * 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},${a})`;
+      ctx.shadowBlur = 2 + bass * 4;
+      ctx.shadowColor = `rgba(${cr},${cg},${cb},${a * 0.5})`;
+      ctx.fill();
+    }
+
+    // ── bass 触发爆发粒子 ──
+    if (playing && bass > 0.5 && this._prevBass <= 0.5) {
+      const count = 8 + Math.floor(bass * 15);
+      for (let n = 0; n < count; n++) {
+        if (this._burstParticles.length >= 200) break;
+        const angle = Math.random() * Math.PI * 2;
+        const r = this.baseRadius + (Math.random() - 0.5) * 40;
+        const speed = 1 + Math.random() * 2.5;
+        this._burstParticles.push({
+          x: cx + Math.cos(angle) * r,
+          y: cy + Math.sin(angle) * r,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: 1.2 + Math.random() * 2,
+          alpha: 0.6 + Math.random() * 0.3,
+          decay: 0.01 + Math.random() * 0.008,
+          color: `${Math.floor(100 + Math.random() * 155)},${Math.floor(80 + Math.random() * 60)},255`,
+        });
       }
     }
     this._prevBass = bass;
-    this._updateAndDrawParticles(ctx, cx, cy);
-  }
 
-  // ─── 中心空腔 ─────────────────────────────────────────
-
-  _drawCore(ctx, cx, cy, volume, mid) {
-    const r = this.baseRadius * 0.85;
-    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    const v = Math.min(volume, 1);
-    glow.addColorStop(0, `rgba(60,80,200,${0.02 + v * 0.03})`);
-    glow.addColorStop(0.4, `rgba(80,60,180,${0.03 + mid * 0.04})`);
-    glow.addColorStop(0.7, `rgba(60,40,160,${0.02 + v * 0.02})`);
-    glow.addColorStop(1, 'transparent');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // ─── 能量环 ───────────────────────────────────────────
-
-  _drawRing(ctx, cx, cy, bands, BANDS, playing) {
-    if (!playing) return;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(this.rotation);
-
-    const step = Math.PI * 2 / BANDS;
-    const R = this.baseRadius;
-
-    // 绘制弧段连接成环
-    for (let i = 0; i < BANDS; i++) {
-      const val = Math.pow(bands[i], 0.65);
-      if (val < 0.01) continue;
-
-      const t = i / BANDS;
-      const angle = step * i - Math.PI / 2;
-      const nextAngle = step * (i + 1) - Math.PI / 2;
-
-      // 环半径随频谱波动
-      const r1 = R + val * R * 0.6;
-      const nextVal = Math.pow(bands[(i + 1) % BANDS], 0.65);
-      const r2 = R + nextVal * R * 0.6;
-
-      // 颜色：蓝 → 紫 → 粉
-      const cr = Math.floor(50 + t * 180 + val * 30);
-      const cg = Math.floor(130 - t * 70);
-      const cb = Math.floor(255 - t * 110);
-      const alpha = 0.35 + val * 0.65;
-
-      const x1 = Math.cos(angle) * r1;
-      const y1 = Math.sin(angle) * r1;
-      const x2 = Math.cos(nextAngle) * r2;
-      const y2 = Math.sin(nextAngle) * r2;
-
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha})`;
-      ctx.lineWidth = 2.5 + val * 3.5;
-      ctx.lineCap = 'round';
-      ctx.shadowBlur = 6 + val * 14;
-      ctx.shadowColor = `rgba(${cr},${cg},${cb},${alpha * 0.7})`;
-      ctx.stroke();
-    }
-
-    // 内侧微弱基准环
-    ctx.beginPath();
-    ctx.arc(0, 0, R, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(80,100,220,0.06)';
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 4;
-    ctx.shadowColor = 'rgba(80,100,220,0.1)';
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-    ctx.restore();
-  }
-
-  // ─── 环形粒子（持续）──────────────────────────────────
-
-  _spawnRingParticles(bands, BANDS, cx, cy) {
-    const step = Math.PI * 2 / BANDS;
-
-    for (let i = 0; i < BANDS; i += 2) {
-      const val = bands[i];
-      if (val < 0.1 || this._ringParticles.length >= 350) continue;
-      if (Math.random() > val * 0.6) continue;
-
-      const angle = step * i + (Math.random() - 0.5) * step;
-      const r = this.baseRadius + Math.pow(val, 0.65) * this.baseRadius * 0.6;
-      const t = i / BANDS;
-
-      this._ringParticles.push({
-        x: cx + Math.cos(angle) * r,
-        y: cy + Math.sin(angle) * r,
-        vx: Math.cos(angle) * (0.2 + Math.random() * 0.3),
-        vy: Math.sin(angle) * (0.2 + Math.random() * 0.3),
-        // 切线方向漂移
-        tx: -Math.sin(angle) * (0.15 + Math.random() * 0.2),
-        ty: Math.cos(angle) * (0.15 + Math.random() * 0.2),
-        size: 0.8 + val * 1.8,
-        alpha: 0.4 + val * 0.5,
-        decay: 0.005 + Math.random() * 0.004,
-        color: this._getColor(t, val),
-      });
-    }
-  }
-
-  // ─── 外扩粒子（bass 触发）────────────────────────────
-
-  _spawnBurst(cx, cy, bass) {
-    const count = 12 + Math.floor(bass * 18);
-    for (let n = 0; n < count; n++) {
-      if (this._burstParticles.length >= 250) break;
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 1.5 + Math.random() * 3 + bass * 2;
-      const t = Math.random();
-      this._burstParticles.push({
-        x: cx + Math.cos(angle) * this.baseRadius,
-        y: cy + Math.sin(angle) * this.baseRadius,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        size: 1.5 + Math.random() * 2.5,
-        alpha: 0.7 + Math.random() * 0.3,
-        decay: 0.012 + Math.random() * 0.008,
-        color: this._getColor(t, bass),
-      });
-    }
-  }
-
-  // ─── 粒子更新 & 绘制 ──────────────────────────────────
-
-  _updateAndDrawParticles(ctx, cx, cy) {
-    // 环形粒子
-    for (let i = this._ringParticles.length - 1; i >= 0; i--) {
-      const p = this._ringParticles[i];
-      p.x += p.vx + p.tx + (Math.random() - 0.5) * 0.2;
-      p.y += p.vy + p.ty + (Math.random() - 0.5) * 0.2;
-      p.alpha -= p.decay;
-      p.size *= 0.998;
-      if (p.alpha <= 0 || p.size < 0.2) { this._ringParticles.splice(i, 1); continue; }
-
+    // 更新爆发粒子
+    for (let i = this._burstParticles.length - 1; i >= 0; i--) {
+      const p = this._burstParticles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= 0.98; p.vy *= 0.98;
+      p.alpha -= p.decay; p.size *= 0.996;
+      if (p.alpha <= 0) { this._burstParticles.splice(i, 1); continue; }
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 6;
       ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.6})`;
       ctx.fill();
     }
 
-    // 外扩粒子
-    for (let i = this._burstParticles.length - 1; i >= 0; i--) {
-      const p = this._burstParticles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vx *= 0.985;
-      p.vy *= 0.985;
-      p.alpha -= p.decay;
-      p.size *= 0.995;
-      if (p.alpha <= 0 || p.size < 0.2) { this._burstParticles.splice(i, 1); continue; }
-
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.7})`;
-      ctx.fill();
-    }
-
     ctx.shadowBlur = 0;
-  }
-
-  // ─── 颜色工具 ─────────────────────────────────────────
-
-  _getColor(t, val) {
-    const r = Math.floor(50 + t * 180 + val * 30);
-    const g = Math.floor(130 - t * 70);
-    const b = Math.floor(255 - t * 110);
-    return `${r},${g},${b}`;
   }
 
   // ─── 销毁 ─────────────────────────────────────────────

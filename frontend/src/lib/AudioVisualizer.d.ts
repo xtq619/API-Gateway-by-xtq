@@ -7,6 +7,7 @@ export default class AudioVisualizer {
     fftSize?: number;
     smoothingFactor?: number;
     baseRadius?: number;
+    particleCount?: number;
   });
   loadFile(file: File | string): void;
   play(): void;
