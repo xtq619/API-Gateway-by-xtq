@@ -203,21 +203,24 @@ export default class AudioVisualizer {
     let high = 0; for (let i = 40; i < 64; i++) high += bands[i]; high /= 24;
 
     const playing = !this.audio.paused;
-    this.time += 0.006;
+    this.time += 0.008;
 
-    this._rotY += 0.004 + bass * 0.003;
-    this._rotX += 0.002 + mid * 0.001;
-    this._rotZ += 0.001;
+    // 旋转随音乐加速
+    this._rotY += 0.005 + bass * 0.012;
+    this._rotX += 0.003 + mid * 0.006;
+    this._rotZ += 0.002 + high * 0.004;
 
     // 鼠标跟随（平滑插值）
-    this._centerX += (this._mouseX - this._centerX) * 0.04;
-    this._centerY += (this._mouseY - this._centerY) * 0.04;
+    this._centerX += (this._mouseX - this._centerX) * 0.06;
+    this._centerY += (this._mouseY - this._centerY) * 0.06;
 
     const cx = this._centerX;
     const cy = this._centerY;
 
-    const noiseScale = 0.005 + mid * 0.003;
-    const amp = 20 + bass * 60 + mid * 25;
+    // 呼吸：bass 驱动球体胀缩
+    const breath = 1 + bass * 0.6;
+    const noiseScale = 0.004 + mid * 0.006;
+    const amp = 30 + bass * 180 + mid * 80 + high * 40;
     const fov = 500;
 
     // 完全透明清除
@@ -229,9 +232,10 @@ export default class AudioVisualizer {
       const n = noise.noise3D(p.bx * noiseScale, p.by * noiseScale, p.bz * noiseScale + this.time);
       const n2 = noise.noise3D(p.bx * noiseScale * 2 + 10, p.by * noiseScale * 2, this.time * 1.5);
 
-      const ox = p.bx + n * amp + n2 * amp * 0.3;
-      const oy = p.by + n * amp * 0.7 + n2 * amp * 0.4;
-      const oz = p.bz + n * amp * 0.5;
+      // 呼吸缩放 + 噪声推拉
+      const ox = p.bx * breath + n * amp + n2 * amp * 0.3;
+      const oy = p.by * breath + n * amp * 0.7 + n2 * amp * 0.4;
+      const oz = p.bz * breath + n * amp * 0.5;
 
       const r = this._rotate3D(ox, oy, oz, this._rotX, this._rotY, this._rotZ);
       const scale = fov / (fov + r.z);
@@ -251,7 +255,7 @@ export default class AudioVisualizer {
     // 绘制粒子 + 连线拖尾
     for (const proj of projected) {
       const depthT = Math.max(0, Math.min(1, (proj.z + this.radius) / (this.radius * 2)));
-      const sz = proj.size * proj.scale * (2 - depthT * 0.8) * (0.8 + bass * 0.4);
+      const sz = proj.size * proj.scale * (2 - depthT * 0.8) * (0.7 + bass * 0.8);
       if (sz < 0.15) continue;
 
       const cr = Math.floor(55 + (1 - depthT) * 170);
