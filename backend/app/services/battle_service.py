@@ -55,11 +55,18 @@ def _build_messages(topic: str, history: list[dict], system_prompt: str) -> list
     return messages
 
 
+import re
+
+
+def _strip_thinking(content: str) -> str:
+    return re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+
+
 async def _call_model(model: ModelRegistry, messages: list[dict]) -> str:
     body = {"model": model.model_name, "messages": messages, "stream": False}
     try:
         resp_body, _, _ = await proxy_service.chat_completion(model, body, {})
-        return resp_body["choices"][0]["message"]["content"]
+        return _strip_thinking(resp_body["choices"][0]["message"]["content"])
     except Exception as e:
         logger.error("Battle model call failed: %s", e)
         raise
