@@ -749,6 +749,22 @@ body::before {
   gap: 10px;
 }
 
+.music-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 18px;
+}
+
+.music-bar {
+  width: 3px;
+  border-radius: 1.5px;
+  background: #dba460;
+  opacity: 0.7;
+  transition: height 0.08s ease-out;
+  min-height: 2px;
+}
+
 .music-tip {
   font-family: var(--font-sans);
   font-size: 11px;
