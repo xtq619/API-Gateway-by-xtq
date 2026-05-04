@@ -179,19 +179,31 @@ export default class AudioVisualizer {
     const raw = new Uint8Array(bufLen);
     analyser.getByteFrequencyData(raw);
 
-    // 平滑插值：smoothed[i] = prev * factor + current * (1 - factor)
+    // 平滑插值
     const f = this.smoothingFactor;
     for (let i = 0; i < bufLen; i++) {
       smoothedData[i] = smoothedData[i] * f + raw[i] * (1 - f);
     }
 
-    // 低频 bass 均值（取前 6 个 bin）
+    // 将频率数据分成 BAND_COUNT 个区间，每个区间取均值
+    const BAND_COUNT = 64;
+    const bands = new Float32Array(BAND_COUNT);
+    const segSize = Math.floor(bufLen / BAND_COUNT);
+    for (let b = 0; b < BAND_COUNT; b++) {
+      let sum = 0;
+      const start = b * segSize;
+      const end = Math.min(start + segSize, bufLen);
+      for (let j = start; j < end; j++) sum += smoothedData[j];
+      bands[b] = sum / (end - start) / 255; // 归一化到 0~1
+    }
+
+    // 低频 bass 均值（前 4 个 band）
     let bass = 0;
-    for (let i = 1; i < 6 && i < bufLen; i++) bass += smoothedData[i];
-    bass /= 5;
+    for (let i = 0; i < 4; i++) bass += bands[i];
+    bass /= 4;
 
     // 呼吸半径
-    const radius = this.baseRadius * (1 + bass / 400);
+    const radius = this.baseRadius * (1 + bass * 0.5);
 
     // 清画布
     ctx.clearRect(0, 0, W, H);
@@ -201,7 +213,7 @@ export default class AudioVisualizer {
 
     // ── 内圈 glow ──
     ctx.save();
-    ctx.shadowBlur = 20 + bass / 8;
+    ctx.shadowBlur = 20 + bass * 30;
     ctx.shadowColor = this.colors[0];
     ctx.beginPath();
     ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2);
@@ -210,16 +222,17 @@ export default class AudioVisualizer {
     ctx.restore();
 
     // ── 频谱圆环 ──
-    const step = Math.PI * 2 / bufLen;
-    const maxBarH = this.baseRadius * 1.2;
+    const step = Math.PI * 2 / BAND_COUNT;
+    const maxBarH = this.baseRadius * 1.8;
 
-    for (let i = 0; i < bufLen; i++) {
-      const val = smoothedData[i] / 255;
+    for (let i = 0; i < BAND_COUNT; i++) {
+      // sqrt 压缩动态范围，让低频不再碾压高频
+      const val = Math.sqrt(bands[i]);
       const barH = val * maxBarH;
-      const angle = step * i - Math.PI / 2; // 从顶部开始
+      const angle = step * i - Math.PI / 2;
 
       // 颜色插值
-      const ci = (i / bufLen) * (this.colors.length - 1);
+      const ci = (i / BAND_COUNT) * (this.colors.length - 1);
       const ciFloor = Math.floor(ci);
       const ciFrac = ci - ciFloor;
       const c1 = this.colors[Math.min(ciFloor, this.colors.length - 1)];
@@ -235,7 +248,7 @@ export default class AudioVisualizer {
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.strokeStyle = color;
-      ctx.lineWidth = Math.max(1.5, 2.5 - bufLen / 200);
+      ctx.lineWidth = Math.max(2, 4 - BAND_COUNT / 40);
       ctx.lineCap = 'round';
       ctx.shadowBlur = 6 + val * 12;
       ctx.shadowColor = color;
