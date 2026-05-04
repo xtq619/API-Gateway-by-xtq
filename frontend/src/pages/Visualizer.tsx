@@ -17,12 +17,11 @@ export default function Visualizer() {
     if (!containerRef.current) return;
     const vis = new AudioVisualizer({
       container: containerRef.current,
-      width: 500,
-      height: 500,
-      colors: ['#dba460', '#64a0dc', '#a078dc'],
-      fftSize: 256,
+      width: 560,
+      height: 560,
+      fftSize: 512,
       smoothingFactor: 0.82,
-      baseRadius: 70,
+      baseRadius: 80,
     });
     vis.start();
     visRef.current = vis;

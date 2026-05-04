@@ -4,7 +4,6 @@ export default class AudioVisualizer {
     container: HTMLElement;
     width?: number;
     height?: number;
-    colors?: string[];
     fftSize?: number;
     smoothingFactor?: number;
     baseRadius?: number;
