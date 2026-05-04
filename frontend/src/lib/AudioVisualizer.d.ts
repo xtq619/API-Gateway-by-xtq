@@ -1,4 +1,5 @@
 export default class AudioVisualizer {
+  audio: HTMLAudioElement;
   constructor(options: {
     container: HTMLElement;
     width?: number;

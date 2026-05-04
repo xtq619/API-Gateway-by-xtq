@@ -27,7 +27,7 @@ export default function Visualizer() {
     vis.start();
     visRef.current = vis;
 
-    const audio = (vis as unknown as { audio: HTMLAudioElement }).audio;
+    const audio = vis.audio;
     const onEnded = () => setPlaying(false);
     audio.addEventListener('pause', onEnded);
     audio.addEventListener('play', () => setPlaying(true));
