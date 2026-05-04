@@ -107,6 +107,7 @@ export default function Admin() {
     azure: 'https://YOUR-RESOURCE.openai.azure.com',
     deepseek: 'https://api.deepseek.com/v1',
     xiaomi: 'https://token-plan-cn.xiaomimimo.com/v1',
+    minimax: 'https://api.minimax.chat/v1',
     custom: '',
   };
 
@@ -294,6 +295,7 @@ export default function Admin() {
                   className={inputClass}>
                   <option value="deepseek">DeepSeek</option>
                   <option value="xiaomi">Xiaomi MiMo</option>
+                  <option value="minimax">MiniMax</option>
                   <option value="openai">OpenAI</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="azure">Azure</option>
