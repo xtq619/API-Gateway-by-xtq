@@ -76,8 +76,6 @@ export default function Register() {
 
           <p className="auth-link animate-fade-in-up" style={{ animationDelay: '0.65s' }}>
             已有账号？<Link to="/login">去登录</Link>
-            <span className="mx-2" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-            <Link to="/feedback/wall">留言墙</Link>
           </p>
         </div>
       </div>
