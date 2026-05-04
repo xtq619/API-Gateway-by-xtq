@@ -108,4 +108,9 @@ export const api = {
   getMyDigestPref: () => request('/digest'),
   updateMyDigestPref: (data: Record<string, unknown>) =>
     request('/digest', { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Battle
+  getBattleHistory: (limit = 20, offset = 0) =>
+    request(`/battle/history?limit=${limit}&offset=${offset}`),
+  getBattleDetail: (id: string) => request(`/battle/history/${id}`),
 };

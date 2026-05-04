@@ -12,6 +12,7 @@ import Billing from './pages/Billing';
 import Models from './pages/Models';
 import Admin from './pages/Admin';
 import Feedback from './pages/Feedback';
+import Battle from './pages/Battle';
 import PublicFeedback from './pages/PublicFeedback';
 import AiNews from './pages/AiNews';
 import Digest from './pages/Digest';
@@ -35,6 +36,10 @@ export default function App() {
 
           <Route path="/feedback" element={<ProtectedRoute />}>
             <Route index element={<Feedback />} />
+          </Route>
+
+          <Route path="/battle" element={<ProtectedRoute />}>
+            <Route index element={<Battle />} />
           </Route>
 
           <Route element={<ProtectedRoute />}>

@@ -6,6 +6,7 @@
 - 系统: Alibaba Cloud Linux 3
 - 域名: `xtq619.xyz` (前端) / `api.xtq619.xyz` (API)
 - SSL: Cloudflare Flexible SSL
+- 访问方式: **Cloudflare Tunnel**（绕过阿里云 ICP 备案要求）
 - 数据库: PostgreSQL 15 (Docker)
 - 缓存: Redis 7 (Docker)
 
@@ -60,14 +61,54 @@ docker compose -f docker-compose.prod.yml exec -w /app backend python -m alembic
 docker compose -f docker-compose.prod.yml exec -w /app backend python -m app.cli create-admin admin@xtq619.xyz <密码> Admin
 ```
 
-### 3. Cloudflare DNS 配置
+### 3. 配置 Cloudflare Tunnel
 
-| Type | Name | Content | Proxy |
-|------|------|---------|-------|
-| A | @ | 47.122.19.239 | Proxied (橙色) |
-| A | api | 47.122.19.239 | Proxied (橙色) |
+> **为什么要用 Tunnel？** 阿里云对未备案域名在 80/443 端口实施 ICP 合规拦截（Beaver WAF 返回 403）。Cloudflare Tunnel 通过出站连接工作，绕过入站端口限制，不需要做 ICP 备案。
 
-SSL/TLS 加密模式: **Flexible**
+```bash
+# 安装 cloudflared
+curl -L https://ghfast.top/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+
+# 登录 Cloudflare（会给出一个 URL，在浏览器打开授权）
+cloudflared tunnel login
+
+# 创建隧道
+cloudflared tunnel create api-gateway
+
+# 记下生成的 UUID，创建配置文件
+mkdir -p ~/.cloudflared
+cat > ~/.cloudflared/config.yml <<EOF
+tunnel: <UUID>
+credentials-file: /root/.cloudflared/<UUID>.json
+
+ingress:
+  - hostname: xtq619.xyz
+    service: http://localhost:80
+  - hostname: api.xtq619.xyz
+    service: http://localhost:80
+  - service: http_status:404
+EOF
+
+# 设置 DNS 路由（会自动创建 CNAME 记录，不需要手动建 A 记录）
+cloudflared tunnel route dns api-gateway xtq619.xyz
+cloudflared tunnel route dns api-gateway api.xtq619.xyz
+
+# 安装为系统服务并启动
+cloudflared service install
+systemctl start cloudflared
+systemctl enable cloudflared
+
+# 验证
+systemctl status cloudflared
+```
+
+Cloudflare 设置（在控制台操作）：
+
+- SSL/TLS 加密模式: **Flexible**
+- Security Level: **Essentially Off**
+- Browser Integrity Check: **关闭**
+- Always Use HTTPS: **开启**
 
 ### 4. 阿里云安全组
 
@@ -83,7 +124,7 @@ SSL/TLS 加密模式: **Flexible**
 
 ```bash
 cd /opt/api-gateway
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ### 停止服务
@@ -179,15 +220,19 @@ SSH 连接旧服务器，导出数据库：
 ```bash
 # 导出数据库
 docker compose -f /opt/api-gateway/docker-compose.prod.yml exec postgres pg_dump -U gateway api_gateway > /tmp/api_gateway_backup.sql
-
-# 下载到本地（在本地 PowerShell 执行）
-scp root@旧IP:/tmp/api_gateway_backup.sql D:\
 ```
 
-备份 .env（如果需要保留密钥）：
+在本地 PowerShell 下载备份文件：
 
-```bash
-scp root@旧IP:/opt/api-gateway/.env D:\
+```powershell
+# 创建备份目录
+mkdir D:\server-backup
+
+# 下载数据库备份
+scp root@旧IP:/tmp/api_gateway_backup.sql D:\server-backup\
+
+# 下载 .env（保留密钥和配置）
+scp root@旧IP:/opt/api-gateway/.env D:\server-backup\
 ```
 
 ### 2. 新服务器准备
@@ -229,44 +274,64 @@ sudo systemctl restart docker
 git clone https://ghfast.top/https://github.com/xtq619/API-Gateway-by-xtq.git /opt/api-gateway
 cd /opt/api-gateway
 
-# 创建 .env（用旧的或新建）
-cat > .env <<EOF
-DB_USER=gateway
-DB_PASSWORD=<随机密码>
-DB_NAME=api_gateway
-SECRET_KEY=<随机密钥>
-ENCRYPTION_KEY=<Fernet密钥>
-DOMAIN=xtq619.xyz
-EOF
+# 上传旧的 .env 到新服务器（在本地 PowerShell 执行）
+scp D:\server-backup\.env root@新IP:/opt/api-gateway/.env
 
 # 构建并启动
 docker compose -f docker-compose.prod.yml up -d --build
-
-# 数据库迁移
-docker compose -f docker-compose.prod.yml exec -w /app backend python -m alembic upgrade head
-
-# 创建管理员
-docker compose -f docker-compose.prod.yml exec -w /app backend python -m app.cli create-admin admin@xtq619.xyz admin123 Admin
 ```
 
 ### 5. 恢复数据库
 
 ```bash
 # 上传备份到新服务器（在本地 PowerShell 执行）
-scp D:\api_gateway_backup.sql root@新IP:/tmp/
+scp D:\server-backup\api_gateway_backup.sql root@新IP:/tmp/
 
 # 在新服务器上恢复
 docker compose -f /opt/api-gateway/docker-compose.prod.yml exec -T postgres psql -U gateway api_gateway < /tmp/api_gateway_backup.sql
+
+# 执行数据库迁移（如果有新增的表或字段）
+docker compose -f docker-compose.prod.yml exec -w /app backend python -m alembic upgrade head
 ```
 
-### 6. 更新 Cloudflare DNS
+### 6. 配置 Cloudflare Tunnel
 
-登录 Cloudflare，把两条 A 记录的 IP 改成新服务器 IP：
+在新服务器上重新安装和配置 Cloudflare Tunnel（cert.pem 不能直接复制，需要重新登录）：
 
-| Type | Name | 旧 IP | 新 IP |
-|------|------|-------|-------|
-| A | @ | 旧IP | 新IP |
-| A | api | 旧IP | 新IP |
+```bash
+# 安装 cloudflared
+curl -L https://ghfast.top/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+
+# 登录（会给出 URL，在浏览器打开授权）
+cloudflared tunnel login
+
+# 创建隧道
+cloudflared tunnel create api-gateway
+
+# 记下 UUID，创建配置文件
+mkdir -p ~/.cloudflared
+cat > ~/.cloudflared/config.yml <<EOF
+tunnel: <UUID>
+credentials-file: /root/.cloudflared/<UUID>.json
+
+ingress:
+  - hostname: xtq619.xyz
+    service: http://localhost:80
+  - hostname: api.xtq619.xyz
+    service: http://localhost:80
+  - service: http_status:404
+EOF
+
+# 删除旧的 DNS A 记录（在 Cloudflare 控制台或 API），然后设置新路由
+cloudflared tunnel route dns api-gateway xtq619.xyz
+cloudflared tunnel route dns api-gateway api.xtq619.xyz
+
+# 安装为服务并启动
+cloudflared service install
+systemctl start cloudflared
+systemctl enable cloudflared
+```
 
 ### 7. 验证
 

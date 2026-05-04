@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { Server, Bot, LogOut, Sparkles, ArrowRight, MessageSquare } from 'lucide-react';
+import { Server, Bot, LogOut, Sparkles, ArrowRight, MessageSquare, Swords } from 'lucide-react';
 
 const sections = [
   {
@@ -22,6 +22,16 @@ const sections = [
     route: '/news',
     iconBg: 'rgba(100,160,220,0.15)',
     iconBorder: 'rgba(100,160,220,0.25)',
+  },
+  {
+    key: 'battle',
+    icon: Swords,
+    title: 'AI 对战',
+    subtitle: 'BATTLE',
+    desc: '两个 AI 模型围绕话题进行多轮辩论，裁判 AI 总结评判',
+    route: '/battle',
+    iconBg: 'rgba(220,120,100,0.15)',
+    iconBorder: 'rgba(220,120,100,0.25)',
   },
   {
     key: 'feedback',
