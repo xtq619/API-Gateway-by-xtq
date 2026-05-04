@@ -106,7 +106,7 @@ export default function AiNews() {
                 {(groupItems as any[]).map(item => {
                   const isExpanded = !!expanded[item.id];
                   return (
-                    <div key={item.id} className="glass-card p-5" style={{ background: 'rgba(20,25,38,0.55)', borderColor: 'rgba(255,255,255,0.1)' }}>
+                    <div key={item.id} className="glass-card p-5" style={{ background: 'rgba(30,35,50,0.65)', borderColor: 'rgba(255,255,255,0.14)' }}>
                       <div className="flex items-start gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
@@ -116,13 +116,13 @@ export default function AiNews() {
                             <span className="text-[11px] text-[var(--color-text-dim)] font-mono">{item.source_name}</span>
                           </div>
                           <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-2 leading-snug">{item.title}</h3>
-                          <p className="text-[13px] leading-relaxed" style={{ color: 'rgba(220,215,205,0.85)' }}>{item.summary}</p>
+                          <p className="text-[13px] leading-relaxed" style={{ color: 'rgba(235,230,220,0.92)' }}>{item.summary}</p>
 
                           {item.content && (
                             <>
                               <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 mt-3' : 'max-h-0'}`}>
                                 <div className="border-t border-[rgba(255,255,255,0.06)] pt-3 mt-1">
-                                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(220,215,205,0.8)' }}>{item.content}</p>
+                                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(235,230,220,0.88)' }}>{item.content}</p>
                                 </div>
                               </div>
                               <button
