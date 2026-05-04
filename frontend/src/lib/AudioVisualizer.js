@@ -45,7 +45,8 @@ export default class AudioVisualizer {
     this.rotation = 0;
     this._prevBass = 0;
     this._shockwaves = [];
-    this._spectrumDrift = 0;
+    this._particles = [];
+    this._PARTICLE_MAX = 600;
 
     // offscreen noise canvas for planet texture
     this._noiseCanvas = null;
@@ -232,8 +233,9 @@ export default class AudioVisualizer {
     // ── Layer 3: 光晕 ──
     this._drawHalo(ctx, cx, cy, planetR, mid);
 
-    // ── Layer 4: 频谱 ──
-    this._drawSpectrum(ctx, cx, cy, planetR, bands, BANDS);
+    // ── Layer 4: 粒子 ──
+    this._updateParticles(bands, BANDS, cx, cy, planetR);
+    this._drawParticles(ctx, cx, cy);
 
     // ── Layer 5: 冲击波 ──
     this._drawShockwaves(ctx, cx, cy);
@@ -321,69 +323,72 @@ export default class AudioVisualizer {
     ctx.fill();
   }
 
-  // ─── Layer 4: 频谱 ────────────────────────────────────
+  // ─── Layer 4: 粒子系统 ────────────────────────────────
 
-  _drawSpectrum(ctx, cx, cy, planetR, bands, BANDS) {
+  _updateParticles(bands, BANDS, cx, cy, planetR) {
+    const step = Math.PI * 2 / BANDS;
+
+    // 每个频段生成粒子
+    for (let i = 0; i < BANDS; i++) {
+      const val = Math.pow(bands[i], 0.7);
+      if (val < 0.08) continue;
+
+      // 根据强度决定每帧生成几个粒子
+      const count = val > 0.5 ? 3 : val > 0.25 ? 2 : 1;
+      for (let n = 0; n < count; n++) {
+        if (this._particles.length >= this._PARTICLE_MAX) break;
+
+        const angle = step * i + (Math.random() - 0.5) * step * 0.8;
+        const speed = 0.5 + val * 2.5 + Math.random() * 0.8;
+        const t = i / BANDS;
+
+        // 颜色：蓝 → 紫 → 粉
+        const cr = Math.floor(60 + t * 170);
+        const cg = Math.floor(130 - t * 80);
+        const cb = Math.floor(255 - t * 120);
+
+        this._particles.push({
+          angle,
+          dist: planetR + Math.random() * 5,
+          speed,
+          size: 1.2 + val * 2.5 + Math.random() * 0.8,
+          alpha: 0.6 + val * 0.4,
+          decay: 0.008 + Math.random() * 0.006,
+          color: `${cr},${cg},${cb}`,
+        });
+      }
+    }
+
+    // 更新已有粒子
+    for (let i = this._particles.length - 1; i >= 0; i--) {
+      const p = this._particles[i];
+      p.dist += p.speed;
+      p.alpha -= p.decay;
+      p.size *= 0.997;
+      if (p.alpha <= 0 || p.size < 0.3) {
+        this._particles.splice(i, 1);
+      }
+    }
+  }
+
+  _drawParticles(ctx, cx, cy) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(this.rotation);
 
-    // ① 动态漂移：每帧递增，低频/高频在圆周上缓慢流动
-    this._spectrumDrift += 0.002;
-    const driftOffset = this._spectrumDrift * BANDS;
-
-    // ② 邻域平滑（spread=2，5 个邻居均值）
-    const SPREAD = 2;
-    const smoothed = new Float32Array(BANDS);
-    for (let i = 0; i < BANDS; i++) {
-      let sum = 0;
-      for (let j = -SPREAD; j <= SPREAD; j++) {
-        const idx = (i + j + BANDS) % BANDS;
-        sum += bands[idx];
-      }
-      smoothed[i] = sum / (SPREAD * 2 + 1);
-    }
-
-    const step = Math.PI * 2 / BANDS;
-
-    for (let i = 0; i < BANDS; i++) {
-      // 应用动态偏移
-      const si = Math.floor((i + driftOffset) % BANDS);
-      const raw = smoothed[si];
-
-      // ③ 强度压缩：pow(0.7) 避免某一块过高
-      const val = Math.pow(raw, 0.7);
-      if (val < 0.015) continue;
-
-      const t = i / BANDS;
-      const thickness = 4.5 - t * 3;
-      const maxH = this.baseRadius * (0.7 + t * 1.6);
-      const barH = val * maxH;
-
-      const angle = step * i - Math.PI / 2;
-
-      // 颜色沿角度渐变：蓝 → 紫 → 粉
-      const r = Math.floor(60 + t * 170 + val * 30);
-      const g = Math.floor(130 - t * 80);
-      const b = Math.floor(255 - t * 120 + val * 20);
-      const alpha = 0.4 + val * 0.6;
-
-      const x1 = Math.cos(angle) * planetR;
-      const y1 = Math.sin(angle) * planetR;
-      const x2 = Math.cos(angle) * (planetR + barH);
-      const y2 = Math.sin(angle) * (planetR + barH);
+    for (const p of this._particles) {
+      const x = Math.cos(p.angle) * p.dist;
+      const y = Math.sin(p.angle) * p.dist;
 
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-      ctx.lineWidth = thickness;
-      ctx.lineCap = 'round';
-      ctx.shadowBlur = 5 + val * 12;
-      ctx.shadowColor = `rgb(${r},${g},${b})`;
-      ctx.stroke();
+      ctx.arc(x, y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+      ctx.shadowBlur = 6 + p.size * 2;
+      ctx.shadowColor = `rgba(${p.color},${p.alpha * 0.8})`;
+      ctx.fill();
     }
 
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
