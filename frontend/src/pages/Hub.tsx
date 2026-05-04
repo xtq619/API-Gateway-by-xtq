@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { Server, Bot, LogOut, Sparkles, ArrowRight, MessageSquare, Swords } from 'lucide-react';
+import { Server, Bot, LogOut, Sparkles, ArrowRight, MessageSquare, Swords, Circle } from 'lucide-react';
 
 const sections = [
   {
@@ -32,6 +32,16 @@ const sections = [
     route: '/battle',
     iconBg: 'rgba(220,120,100,0.15)',
     iconBorder: 'rgba(220,120,100,0.25)',
+  },
+  {
+    key: 'visualizer',
+    icon: Circle,
+    title: '频谱可视化',
+    subtitle: 'VISUALIZER',
+    desc: '上传音频，体验圆形频谱跳动、呼吸节奏、渐变发光的可视化效果',
+    route: '/visualizer',
+    iconBg: 'rgba(100,200,160,0.15)',
+    iconBorder: 'rgba(100,200,160,0.25)',
   },
   {
     key: 'feedback',
@@ -94,7 +104,7 @@ export default function Hub() {
       </div>
 
       {/* Center content */}
-      <div className="relative z-10 flex flex-col items-center px-6 w-full max-w-[720px]">
+      <div className="relative z-10 flex flex-col items-center px-6 w-full max-w-[900px]">
         {/* Title */}
         <div className="text-center mb-12 animate-fade-in-up">
           <Sparkles size={20} className="text-[var(--color-accent)] mx-auto mb-4" />
