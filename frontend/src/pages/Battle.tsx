@@ -133,12 +133,14 @@ export default function Battle() {
                 setJudgeSummary(text.slice(0, i));
                 await new Promise((r) => setTimeout(r, 10));
               }
+            } else if (event.type === 'error') {
+              setError(event.detail || '对战过程中发生错误');
             }
           } catch { /* skip malformed lines */ }
         }
       }
-    } catch {
-      setError('网络错误');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? `错误: ${e.message}` : '网络错误');
     }
     setStreaming(false);
   };

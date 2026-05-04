@@ -76,49 +76,53 @@ async def run_battle(
 ):
     history: list[dict] = []
 
-    for r in range(1, rounds + 1):
-        # Model A turn
-        messages_a = _build_messages(topic, history, SYSTEM_PROMPT_A)
-        content_a = await _call_model(model_a, messages_a)
-        turn_a = {"round": r, "model": "a", "model_name": model_a.display_name, "content": content_a}
-        history.append(turn_a)
-        yield json.dumps({"type": "turn", **turn_a}, ensure_ascii=False)
+    try:
+        for r in range(1, rounds + 1):
+            # Model A turn
+            messages_a = _build_messages(topic, history, SYSTEM_PROMPT_A)
+            content_a = await _call_model(model_a, messages_a)
+            turn_a = {"round": r, "model": "a", "model_name": model_a.display_name, "content": content_a}
+            history.append(turn_a)
+            yield json.dumps({"type": "turn", **turn_a}, ensure_ascii=False)
 
-        # Model B turn
-        messages_b = _build_messages(topic, history, SYSTEM_PROMPT_B)
-        content_b = await _call_model(model_b, messages_b)
-        turn_b = {"round": r, "model": "b", "model_name": model_b.display_name, "content": content_b}
-        history.append(turn_b)
-        yield json.dumps({"type": "turn", **turn_b}, ensure_ascii=False)
+            # Model B turn
+            messages_b = _build_messages(topic, history, SYSTEM_PROMPT_B)
+            content_b = await _call_model(model_b, messages_b)
+            turn_b = {"round": r, "model": "b", "model_name": model_b.display_name, "content": content_b}
+            history.append(turn_b)
+            yield json.dumps({"type": "turn", **turn_b}, ensure_ascii=False)
 
-    # Judge summary
-    history_text = "\n\n".join(
-        f"【{'辩手A' if t['model'] == 'a' else '辩手B'} 第{t['round']}轮】\n{t['content']}"
-        for t in history
-    )
-    judge_messages = [
-        {"role": "system", "content": JUDGE_PROMPT},
-        {"role": "user", "content": f"辩论主题：{topic}\n\n以下是完整辩论记录：\n\n{history_text}"},
-    ]
-    judge_content = await _call_model(judge_model, judge_messages)
-    yield json.dumps({"type": "judge", "content": judge_content}, ensure_ascii=False)
+        # Judge summary
+        history_text = "\n\n".join(
+            f"【{'辩手A' if t['model'] == 'a' else '辩手B'} 第{t['round']}轮】\n{t['content']}"
+            for t in history
+        )
+        judge_messages = [
+            {"role": "system", "content": JUDGE_PROMPT},
+            {"role": "user", "content": f"辩论主题：{topic}\n\n以下是完整辩论记录：\n\n{history_text}"},
+        ]
+        judge_content = await _call_model(judge_model, judge_messages)
+        yield json.dumps({"type": "judge", "content": judge_content}, ensure_ascii=False)
 
-    # Save to database
-    record = BattleRecord(
-        user_id=user_id,
-        topic=topic,
-        model_a_name=model_a.display_name,
-        model_b_name=model_b.display_name,
-        judge_model_name=judge_model.display_name,
-        rounds=rounds,
-        history=history,
-        judge_summary=judge_content,
-        created_at=datetime.now(timezone.utc),
-    )
-    db.add(record)
-    await db.commit()
+        # Save to database
+        record = BattleRecord(
+            user_id=user_id,
+            topic=topic,
+            model_a_name=model_a.display_name,
+            model_b_name=model_b.display_name,
+            judge_model_name=judge_model.display_name,
+            rounds=rounds,
+            history=history,
+            judge_summary=judge_content,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(record)
+        await db.commit()
 
-    yield json.dumps({"type": "done", "record_id": str(record.id)}, ensure_ascii=False)
+        yield json.dumps({"type": "done", "record_id": str(record.id)}, ensure_ascii=False)
+    except Exception as e:
+        logger.error("Battle error: %s", e, exc_info=True)
+        yield json.dumps({"type": "error", "detail": str(e)}, ensure_ascii=False)
 
 
 async def list_battle_history(db: AsyncSession, user_id: uuid.UUID, limit: int, offset: int):
