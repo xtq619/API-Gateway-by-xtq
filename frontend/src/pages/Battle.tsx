@@ -169,7 +169,7 @@ export default function Battle() {
         </button>
         <div className="flex items-center gap-2">
           <Swords size={18} className="text-[var(--color-accent)]" />
-          <span className="text-sm font-semibold text-[var(--color-text)]">AI 对战</span>
+          <span className="text-sm font-semibold text-[var(--color-text)]">模型擂台</span>
         </div>
         <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
           <User size={14} /> {user?.name || '用户'}
