@@ -45,6 +45,7 @@ export default class AudioVisualizer {
     this.rotation = 0;
     this._prevBass = 0;
     this._shockwaves = [];
+    this._spectrumDrift = 0;
 
     // offscreen noise canvas for planet texture
     this._noiseCanvas = null;
@@ -327,30 +328,33 @@ export default class AudioVisualizer {
     ctx.translate(cx, cy);
     ctx.rotate(this.rotation);
 
-    // ① 旋转偏移：把低频从起点移开，避免左下永远最高
-    const offset = Math.floor(BANDS / 4);
+    // ① 动态漂移：每帧递增，低频/高频在圆周上缓慢流动
+    this._spectrumDrift += 0.002;
+    const driftOffset = this._spectrumDrift * BANDS;
 
-    // ② 邻域平滑 + ③ 能量包络
+    // ② 邻域平滑（spread=2，5 个邻居均值）
+    const SPREAD = 2;
     const smoothed = new Float32Array(BANDS);
     for (let i = 0; i < BANDS; i++) {
-      const prev = bands[(i - 1 + BANDS) % BANDS];
-      const curr = bands[i];
-      const next = bands[(i + 1) % BANDS];
-      const avg = (prev + curr + next) / 3;
-      // sin 包络：两端收敛，中间饱满
-      const envelope = Math.sin((i / BANDS) * Math.PI);
-      smoothed[i] = avg * envelope;
+      let sum = 0;
+      for (let j = -SPREAD; j <= SPREAD; j++) {
+        const idx = (i + j + BANDS) % BANDS;
+        sum += bands[idx];
+      }
+      smoothed[i] = sum / (SPREAD * 2 + 1);
     }
 
     const step = Math.PI * 2 / BANDS;
 
     for (let i = 0; i < BANDS; i++) {
-      // 应用旋转偏移
-      const si = (i + offset) % BANDS;
-      const val = Math.pow(smoothed[si], 0.55);
+      // 应用动态偏移
+      const si = Math.floor((i + driftOffset) % BANDS);
+      const raw = smoothed[si];
+
+      // ③ 强度压缩：pow(0.7) 避免某一块过高
+      const val = Math.pow(raw, 0.7);
       if (val < 0.015) continue;
 
-      // 不均匀：低频更粗更短，高频更细更长
       const t = i / BANDS;
       const thickness = 4.5 - t * 3;
       const maxH = this.baseRadius * (0.7 + t * 1.6);
