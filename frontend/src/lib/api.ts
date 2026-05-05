@@ -84,6 +84,9 @@ export const api = {
     request(`/admin/news/${id}`, { method: 'DELETE' }),
   autoFetchNews: () => request('/admin/news/auto-fetch', { method: 'POST' }),
   listRssSources: () => request('/admin/news/auto-fetch/sources'),
+  getNewsSettings: () => request('/admin/news/settings'),
+  updateNewsSettings: (data: { fetch_count?: number; fetch_hour?: number; fetch_minute?: number }) =>
+    request('/admin/news/settings', { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Admin
   adminUsers: () => request('/admin/users'),

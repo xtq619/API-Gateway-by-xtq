@@ -27,6 +27,7 @@ from app.services.rate_limiter import rate_limiter
 
 
 _digest_scheduler = None
+_news_scheduler = None
 
 
 def _setup_digest_scheduler():
@@ -120,18 +121,131 @@ async def _refresh_digest_jobs():
     pass
 
 
+def _setup_news_scheduler():
+    """Daily auto-fetch military news. Reads time from DB settings."""
+    import logging
+
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    logger = logging.getLogger(__name__)
+
+    async def fetch_military_news():
+        try:
+            from app.core.database import async_session
+            from app.services.news_fetcher import auto_fetch_news
+            from app.services.news_setting_service import get_settings
+
+            async with async_session() as db:
+                settings = await get_settings(db)
+                stats = await auto_fetch_news(db, total_count=settings.fetch_count)
+                logger.info("Daily military news fetch (count=%d): %s", settings.fetch_count, stats)
+        except Exception:
+            logger.exception("Daily news fetch failed")
+
+    scheduler = AsyncIOScheduler()
+
+    # Read initial schedule time from DB (sync at startup, default 08:00)
+    hour, minute = 8, 0
+    try:
+        from app.core.database import async_session
+        from app.services.news_setting_service import get_settings
+        import asyncio as _asyncio
+
+        async def _read_settings():
+            async with async_session() as db:
+                s = await get_settings(db)
+                return s.fetch_hour, s.fetch_minute
+
+        # Run synchronously at startup
+        loop = _asyncio.get_event_loop()
+        if loop.is_running():
+            # Can't await in sync context at module load; use defaults, will be corrected in lifespan
+            pass
+        else:
+            hour, minute = loop.run_until_complete(_read_settings())
+    except Exception:
+        pass
+
+    scheduler.add_job(
+        fetch_military_news,
+        CronTrigger(hour=hour, minute=minute, timezone="Asia/Shanghai"),
+        id="daily_news_fetch",
+        name="Daily Military News Fetch",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("News scheduler started (daily at %02d:%02d CST)", hour, minute)
+    return scheduler
+
+
+async def reschedule_news_job(hour: int, minute: int):
+    """Reschedule the daily news fetch job."""
+    global _news_scheduler
+    if not _news_scheduler:
+        return
+
+    from apscheduler.triggers.cron import CronTrigger
+
+    try:
+        _news_scheduler.remove_job("daily_news_fetch")
+    except Exception:
+        pass
+
+    _news_scheduler.add_job(
+        _news_scheduler._job_defaults.get("func") or _get_news_job_func(),
+        CronTrigger(hour=hour, minute=minute, timezone="Asia/Shanghai"),
+        id="daily_news_fetch",
+        name="Daily Military News Fetch",
+        replace_existing=True,
+    )
+    logging.getLogger(__name__).info("News job rescheduled to %02d:%02d CST", hour, minute)
+
+
+def _get_news_job_func():
+    """Return the news fetch job function."""
+    async def fetch_military_news():
+        try:
+            from app.core.database import async_session
+            from app.services.news_fetcher import auto_fetch_news
+            from app.services.news_setting_service import get_settings
+
+            async with async_session() as db:
+                settings = await get_settings(db)
+                stats = await auto_fetch_news(db, total_count=settings.fetch_count)
+                logging.getLogger(__name__).info("Daily military news fetch: %s", stats)
+        except Exception:
+            logging.getLogger(__name__).exception("Daily news fetch failed")
+    return fetch_military_news
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _news_scheduler
     from app.core.security import _get_fernet
     _get_fernet()  # Validate Fernet key early — crash fast if misconfigured
     await rate_limiter.connect()
 
     scheduler = _setup_digest_scheduler()
+    _news_scheduler = _setup_news_scheduler()
+
+    # Read actual settings from DB and reschedule if different from defaults
+    try:
+        from app.core.database import async_session
+        from app.services.news_setting_service import get_settings
+        async with async_session() as db:
+            settings = await get_settings(db)
+            if settings.fetch_hour != 8 or settings.fetch_minute != 0:
+                await reschedule_news_job(settings.fetch_hour, settings.fetch_minute)
+    except Exception:
+        pass
 
     yield
 
     if scheduler:
         scheduler.shutdown(wait=False)
+    if _news_scheduler:
+        _news_scheduler.shutdown(wait=False)
     if rate_limiter.redis:
         await rate_limiter.redis.close()
     await proxy_service.close()

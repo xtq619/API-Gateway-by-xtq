@@ -8,7 +8,7 @@ class NewsCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     summary: str = Field(min_length=1, max_length=1000)
     content: str | None = None
-    category: str = Field(default="新闻", pattern="^(新闻|论文|工具|其他)$")
+    category: str = Field(default="军事", pattern="^(新闻|论文|工具|军事|其他)$")
     source_name: str = Field(default="官方", max_length=100)
     source_url: str | None = None
     is_published: bool = False

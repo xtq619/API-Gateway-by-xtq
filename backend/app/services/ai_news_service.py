@@ -64,7 +64,7 @@ async def delete_news(db: AsyncSession, n: AiNews) -> None:
     await db.commit()
 
 
-async def fetch_and_summarize(db: AsyncSession) -> dict:
+async def fetch_and_summarize(db: AsyncSession, total_count: int = 10) -> dict:
     """Trigger auto-fetch pipeline: RSS → AI summarize → save."""
     from app.services.news_fetcher import auto_fetch_news
-    return await auto_fetch_news(db)
+    return await auto_fetch_news(db, total_count=total_count)

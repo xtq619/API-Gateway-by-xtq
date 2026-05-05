@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Trash2, Edit2, Plus, RefreshCw, Save, Send } from 'lucide-react';
+import { Trash2, Edit2, Plus, RefreshCw, Save, Send, Settings } from 'lucide-react';
 
 export default function Admin() {
   const [users, setUsers] = useState<any[]>([]);
@@ -97,8 +97,11 @@ export default function Admin() {
   const [autoFetching, setAutoFetching] = useState(false);
   const [fetchResult, setFetchResult] = useState<string | null>(null);
   const [selectedNews, setSelectedNews] = useState<Set<string>>(new Set());
+  const [showNewsSettings, setShowNewsSettings] = useState(false);
+  const [newsSettings, setNewsSettings] = useState({ fetch_count: 10, fetch_hour: 8, fetch_minute: 0 });
+  const [savingNewsSettings, setSavingNewsSettings] = useState(false);
   const [newsForm, setNewsForm] = useState({
-    title: '', summary: '', content: '', category: '新闻',
+    title: '', summary: '', content: '', category: '军事',
     source_name: '官方', source_url: '', is_published: false,
   });
   const PROVIDER_URLS: Record<string, string> = {
@@ -189,6 +192,31 @@ export default function Admin() {
     setAutoFetching(false);
   };
 
+  const loadNewsSettings = async () => {
+    const res = await api.getNewsSettings();
+    if (res.ok) {
+      const data = await res.json();
+      setNewsSettings(data);
+    }
+  };
+
+  const saveNewsSettings = async () => {
+    setSavingNewsSettings(true);
+    setError(null);
+    setSuccess(null);
+    const res = await api.updateNewsSettings(newsSettings);
+    if (res.ok) {
+      const data = await res.json();
+      setNewsSettings(data);
+      setSuccess('资讯设置已保存');
+      setTimeout(() => setSuccess(null), 2000);
+    } else {
+      const body = await res.json().catch(() => null);
+      setError(body?.detail?.message || '保存失败');
+    }
+    setSavingNewsSettings(false);
+  };
+
   const handleBatchDelete = async () => {
     if (selectedNews.size === 0) return;
     if (!confirm(`确认删除选中的 ${selectedNews.size} 条资讯？`)) return;
@@ -272,9 +300,9 @@ export default function Admin() {
         <button onClick={() => setTab('users')} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
           tab === 'users' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
         }`}>用户管理</button>
-        <button onClick={() => { setTab('news'); loadNews(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
+        <button onClick={() => { setTab('news'); loadNews(); loadNewsSettings(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
           tab === 'news' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
-        }`}>AI 资讯管理</button>
+        }`}>军事资讯管理</button>
         <button onClick={() => { setTab('feedback'); loadFeedback(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
           tab === 'feedback' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
         }`}>留言管理</button>
@@ -406,7 +434,7 @@ export default function Admin() {
       {tab === 'news' && (
         <div className="glass-card overflow-hidden">
           <div className="p-4 border-b border-[var(--color-border)] flex items-center justify-between">
-            <h3 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider uppercase">AI 资讯列表（{newsTotal}）</h3>
+            <h3 className="font-mono text-[11px] text-[var(--color-text-muted)] tracking-wider uppercase">军事资讯列表（{newsTotal}）</h3>
             <div className="flex items-center gap-2">
               {selectedNews.size > 0 && (
                 <button onClick={handleBatchDelete}
@@ -417,16 +445,57 @@ export default function Admin() {
               {fetchResult && (
                 <span className="text-[11px] font-mono text-[var(--color-accent)] mr-2">{fetchResult}</span>
               )}
+              <button onClick={() => { setShowNewsSettings(!showNewsSettings); if (!showNewsSettings) loadNewsSettings(); }}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-mono tracking-wider border border-[rgba(255,255,255,0.15)] text-[var(--color-text-muted)] transition-all hover:bg-white hover:text-black cursor-pointer">
+                <Settings size={12} /> 设置
+              </button>
               <button onClick={handleAutoFetch} disabled={autoFetching}
                 className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-mono tracking-wider border border-[var(--color-accent)] text-[var(--color-accent)] transition-all hover:bg-[var(--color-accent-dim)] cursor-pointer disabled:opacity-40">
                 <RefreshCw size={12} className={autoFetching ? 'animate-spin' : ''} />
                 {autoFetching ? '抓取 中...' : '自动抓取'}
               </button>
-              <button onClick={() => { setEditingNewsId(null); setNewsForm({ title: '', summary: '', content: '', category: '新闻', source_name: '官方', source_url: '', is_published: false }); setShowNewsForm(true); }} className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-mono tracking-wider bg-white text-black border border-white transition-opacity hover:opacity-85 cursor-pointer">
+              <button onClick={() => { setEditingNewsId(null); setNewsForm({ title: '', summary: '', content: '', category: '军事', source_name: '官方', source_url: '', is_published: false }); setShowNewsForm(true); }} className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-mono tracking-wider bg-white text-black border border-white transition-opacity hover:opacity-85 cursor-pointer">
                 <Plus size={12} /> 新建资讯
               </button>
             </div>
           </div>
+
+          {showNewsSettings && (
+            <div className="p-6 border-b border-[var(--color-border)]">
+              <h4 className="font-mono text-[12px] text-[var(--color-text)] tracking-wider mb-4">军事资讯抓取设置</h4>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">每日抓取数量</label>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={1} max={50} value={newsSettings.fetch_count}
+                      onChange={e => setNewsSettings({ ...newsSettings, fetch_count: parseInt(e.target.value) || 10 })}
+                      className={inputClass + ' w-20'} />
+                    <span className="font-mono text-[11px] text-[var(--color-text-dim)]">条</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">推送时间</label>
+                  <div className="flex items-center gap-1">
+                    <input type="number" min={0} max={23} value={newsSettings.fetch_hour}
+                      onChange={e => setNewsSettings({ ...newsSettings, fetch_hour: parseInt(e.target.value) || 0 })}
+                      className={inputClass + ' w-16 text-center'} />
+                    <span className="font-mono text-[12px] text-[var(--color-text-dim)]">:</span>
+                    <input type="number" min={0} max={59} value={newsSettings.fetch_minute}
+                      onChange={e => setNewsSettings({ ...newsSettings, fetch_minute: parseInt(e.target.value) || 0 })}
+                      className={inputClass + ' w-16 text-center'} />
+                    <span className="font-mono text-[11px] text-[var(--color-text-dim)]">北京时间</span>
+                  </div>
+                </div>
+              </div>
+              <p className="font-mono text-[10px] text-[var(--color-text-dim)] mb-4">4 个军事 RSS 源均匀分配，每源约 {Math.ceil(newsSettings.fetch_count / 4)} 条</p>
+              <div className="flex gap-3">
+                <button onClick={saveNewsSettings} disabled={savingNewsSettings} className={btnPrimaryClass}>
+                  <Save size={12} className="inline mr-1" />{savingNewsSettings ? '保存中...' : '保存设置'}
+                </button>
+                <button onClick={() => setShowNewsSettings(false)} className={btnClass}>收起</button>
+              </div>
+            </div>
+          )}
 
           {showNewsForm && (
             <div className="p-6 border-b border-[var(--color-border)]">
@@ -441,6 +510,7 @@ export default function Admin() {
                     <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1">分类</label>
                     <select value={newsForm.category} onChange={e => setNewsForm({...newsForm, category: e.target.value})} className={inputClass}>
                       <option value="新闻">新闻</option>
+                      <option value="军事">军事</option>
                       <option value="论文">论文</option>
                       <option value="工具">工具</option>
                       <option value="其他">其他</option>

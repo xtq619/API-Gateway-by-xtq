@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 from datetime import datetime, timezone
 
 import feedparser
@@ -17,29 +18,24 @@ logger = logging.getLogger(__name__)
 
 RSS_SOURCES = [
     {
-        "name": "TechCrunch AI",
-        "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
-        "default_category": "新闻",
+        "name": "Defense News",
+        "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml",
+        "default_category": "军事",
     },
     {
-        "name": "The Verge AI",
-        "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-        "default_category": "新闻",
+        "name": "The War Zone",
+        "url": "https://www.thedrive.com/the-war-zone/rss",
+        "default_category": "军事",
     },
     {
-        "name": "MIT Technology Review",
-        "url": "https://www.technologyreview.com/feed/",
-        "default_category": "论文",
+        "name": "Military.com",
+        "url": "https://www.military.com/rss",
+        "default_category": "军事",
     },
     {
-        "name": "Hacker News AI",
-        "url": "https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT+OR+Claude+OR+Gemini",
-        "default_category": "工具",
-    },
-    {
-        "name": "VentureBeat AI",
-        "url": "https://venturebeat.com/category/ai/feed/",
-        "default_category": "新闻",
+        "name": "Breaking Defense",
+        "url": "https://breakingdefense.com/feed/",
+        "default_category": "军事",
     },
 ]
 
@@ -50,7 +46,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; APIGateway/1.0; +https://xtq619.xyz)"
 LLM_CONCURRENCY = 5
 
 
-async def fetch_rss_entries(source: dict) -> list[dict]:
+async def fetch_rss_entries(source: dict, max_items: int = 10) -> list[dict]:
     """Fetch and parse an RSS/Atom feed, return list of entry dicts."""
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
@@ -62,7 +58,7 @@ async def fetch_rss_entries(source: dict) -> list[dict]:
 
     feed = feedparser.parse(resp.text)
     entries = []
-    for entry in feed.entries[:10]:
+    for entry in feed.entries[:max_items]:
         link = getattr(entry, "link", None) or ""
         title = getattr(entry, "title", "") or ""
         summary_raw = getattr(entry, "summary", "") or ""
@@ -109,12 +105,14 @@ async def get_first_enabled_model(db: AsyncSession) -> ModelRegistry | None:
 
 def _build_prompt(title: str, content: str, default_category: str) -> str:
     content_snippet = content[:2000] if content else ""
-    return f"""你是一个 AI 新闻编辑。请阅读以下文章，用中文生成一条简洁的摘要（80-120字），
-并从以下分类中选择最合适的一个：新闻、论文、工具、其他。
+    return f"""你是一个军事新闻编辑。请阅读以下国外军事文章，用中文生成一条简洁的摘要（80-120字）。
+分类固定为"军事"。
 
-如果原文已经是中文，请保持原文风格；如果是英文，请翻译为中文摘要。
-
-文章来源默认分类建议：{default_category}
+要求：
+1. 必须使用中文输出
+2. 如果原文是英文，请翻译并概括为中文
+3. 重点关注：武器装备、军事行动、国防政策、地缘冲突、军事科技等方面
+4. 语言简洁有力，适合移动端阅读
 
 标题：{title}
 
@@ -122,7 +120,7 @@ def _build_prompt(title: str, content: str, default_category: str) -> str:
 {content_snippet}
 
 请严格按以下 JSON 格式返回，不要包含任何其他内容：
-{{"summary": "中文摘要内容", "category": "分类"}}"""
+{{"summary": "中文摘要内容", "category": "军事"}}"""
 
 
 async def summarize_with_ai(
@@ -160,7 +158,7 @@ async def summarize_with_ai(
         parsed = json.loads(content_text)
         summary = parsed.get("summary", title)
         category = parsed.get("category", default_category)
-        if category not in ("新闻", "论文", "工具", "其他"):
+        if category not in ("新闻", "论文", "工具", "军事", "其他"):
             category = default_category
         return summary, category
 
@@ -203,9 +201,10 @@ async def _process_one_entry(
     )
 
 
-async def auto_fetch_news(db: AsyncSession) -> dict:
+async def auto_fetch_news(db: AsyncSession, total_count: int = 10) -> dict:
     """Main pipeline: fetch RSS (parallel) → batch dedup → AI summarize (concurrent) → save.
 
+    Evenly distributes fetch across RSS sources.
     Expected time: ~10-20s depending on RSS source speed and LLM latency.
     """
     model = await get_first_enabled_model(db)
@@ -215,8 +214,11 @@ async def auto_fetch_news(db: AsyncSession) -> dict:
 
     stats = {"fetched": 0, "created": 0, "skipped": 0, "errors": 0}
 
+    # Even distribution: each source gets ceil(total_count / num_sources)
+    per_source = math.ceil(total_count / len(RSS_SOURCES))
+
     # Step 1: Fetch all RSS feeds in parallel
-    rss_tasks = [fetch_rss_entries(source) for source in RSS_SOURCES]
+    rss_tasks = [fetch_rss_entries(source, max_items=per_source) for source in RSS_SOURCES]
     results = await asyncio.gather(*rss_tasks)
 
     all_entries = []
@@ -236,6 +238,9 @@ async def auto_fetch_news(db: AsyncSession) -> dict:
     if not new_entries:
         await db.commit()
         return stats
+
+    # Limit to total_count
+    new_entries = new_entries[:total_count]
 
     # Step 3: AI summarize concurrently with semaphore
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
