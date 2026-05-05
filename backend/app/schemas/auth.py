@@ -22,6 +22,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class WxLoginRequest(BaseModel):
+    code: str
+
+
+class WxBindRequest(BaseModel):
+    code: str
+    email: str
+    password: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -1,12 +1,14 @@
+import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import get_db, async_session
 from app.core.dependencies import get_current_user_id
+from app.core.security import decode_access_token
 from app.models.model_registry import ModelRegistry
 from app.schemas.battle import BattleHistoryList, BattleHistoryResponse, BattleRequest, BattleTurn
 from app.services import battle_service
@@ -101,3 +103,76 @@ async def get_battle_detail(
         judge_summary=record.judge_summary,
         created_at=record.created_at,
     )
+
+
+@router.websocket("/ws")
+async def battle_ws(ws: WebSocket):
+    await ws.accept()
+
+    # Authenticate via token query param
+    token = ws.query_params.get("token")
+    if not token:
+        await ws.send_json({"type": "error", "detail": "缺少 token"})
+        await ws.close()
+        return
+
+    payload = decode_access_token(token)
+    if not payload:
+        await ws.send_json({"type": "error", "detail": "token 无效或已过期"})
+        await ws.close()
+        return
+
+    user_id = payload.get("sub")
+    if not user_id:
+        await ws.send_json({"type": "error", "detail": "token 缺少用户信息"})
+        await ws.close()
+        return
+
+    try:
+        # Receive battle config
+        raw = await ws.receive_text()
+        config = json.loads(raw)
+        topic = config.get("topic", "")
+        model_a_id = config.get("model_a_id")
+        model_b_id = config.get("model_b_id")
+        judge_model_id = config.get("judge_model_id")
+        rounds = config.get("rounds", 2)
+
+        if not all([topic, model_a_id, model_b_id, judge_model_id]):
+            await ws.send_json({"type": "error", "detail": "缺少必要参数"})
+            await ws.close()
+            return
+
+        async with async_session() as db:
+            models = {}
+            for label, model_id in [("a", model_a_id), ("b", model_b_id), ("judge", judge_model_id)]:
+                result = await db.execute(
+                    select(ModelRegistry).where(ModelRegistry.id == model_id, ModelRegistry.is_enabled == True)
+                )
+                model = result.scalar_one_or_none()
+                if not model:
+                    await ws.send_json({"type": "error", "detail": f"模型 {label} 不存在或未启用"})
+                    await ws.close()
+                    return
+                models[label] = model
+
+            async for event in battle_service.run_battle(
+                db=db,
+                topic=topic,
+                model_a=models["a"],
+                model_b=models["b"],
+                judge_model=models["judge"],
+                rounds=rounds,
+                user_id=uuid.UUID(user_id),
+            ):
+                await ws.send_text(event)
+
+        await ws.close()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await ws.send_json({"type": "error", "detail": str(e)})
+            await ws.close()
+        except Exception:
+            pass

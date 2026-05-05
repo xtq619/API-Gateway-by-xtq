@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     DEFAULT_RATE_LIMIT_RPM: int = 60
     MARKUP_RATIO: float = 1.5
     STREAM_READ_TIMEOUT: int = 60
+    WX_APPID: str = ""
+    WX_SECRET: str = ""
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://localhost:8000",

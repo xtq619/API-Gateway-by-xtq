@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user_id
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, WxLoginRequest, WxBindRequest
 from app.services import auth_service
 from app.services.rate_limiter import rate_limiter
 
@@ -48,3 +48,23 @@ async def get_me(user_id: str = Depends(get_current_user_id), db: AsyncSession =
     if not user:
         raise HTTPException(status_code=404, detail="用户未找到")
     return user
+
+
+@router.post("/wxlogin", response_model=TokenResponse)
+async def wx_login(req: WxLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await _check_auth_rate_limit(request)
+    try:
+        result = await auth_service.wx_login_user(db, req.code)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/wxbind", response_model=TokenResponse)
+async def wx_bind(req: WxBindRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await _check_auth_rate_limit(request)
+    try:
+        result = await auth_service.wx_bind_user(db, req.code, req.email, req.password)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
