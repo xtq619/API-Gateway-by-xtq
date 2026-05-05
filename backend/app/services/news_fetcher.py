@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 RSS_SOURCES = [
     {
         "name": "The War Zone",
-        "url": "https://www.twz.com/feed",
+        "url": "https://www.twz.com/rss",
         "default_category": "军事",
     },
     {
@@ -28,13 +28,13 @@ RSS_SOURCES = [
         "default_category": "军事",
     },
     {
-        "name": "Military.com",
-        "url": "https://www.military.com/rss",
+        "name": "C4ISRNET",
+        "url": "https://www.c4isrnet.com/arc/outboundfeeds/rss/?outputType=xml",
         "default_category": "军事",
     },
     {
-        "name": "Breaking Defense",
-        "url": "https://breakingdefense.com/feed/",
+        "name": "Task & Purpose",
+        "url": "https://taskandpurpose.com/feed/",
         "default_category": "军事",
     },
 ]
@@ -147,8 +147,13 @@ async def summarize_with_ai(
         resp.raise_for_status()
         data = resp.json()
 
-        content_text = data["choices"][0]["message"]["content"].strip()
+        content_text = data["choices"][0]["message"]["content"]
+        if not content_text or not content_text.strip():
+            raise ValueError("Empty LLM response")
 
+        content_text = content_text.strip()
+
+        # Strip markdown code fences
         if "```" in content_text:
             start = content_text.find("{")
             end = content_text.rfind("}")
@@ -162,6 +167,11 @@ async def summarize_with_ai(
             category = default_category
         return summary, category
 
+    except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
+        # Structured errors: JSON parse failure, missing keys, empty response
+        logger.warning("AI summarization parse error for '%s': %s", title[:50], e)
+        fallback = content[:100] if content else title
+        return fallback, default_category
     except Exception as e:
         logger.warning("AI summarization failed for '%s': %s", title[:50], e)
         fallback = content[:100] if content else title

@@ -30,6 +30,23 @@ _digest_scheduler = None
 _news_scheduler = None
 
 
+async def _fetch_military_news():
+    """唯一的新闻抓取任务函数，被调度器和 reschedule 共同引用。"""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from app.core.database import async_session
+        from app.services.news_fetcher import auto_fetch_news
+        from app.services.news_setting_service import get_settings
+
+        async with async_session() as db:
+            settings = await get_settings(db)
+            stats = await auto_fetch_news(db, total_count=settings.fetch_count)
+            logger.info("Daily military news fetch (count=%d): %s", settings.fetch_count, stats)
+    except Exception:
+        logger.exception("Daily news fetch failed")
+
+
 def _setup_digest_scheduler():
     """Start APScheduler. Checks every minute if any user needs a digest."""
     import logging
@@ -130,45 +147,13 @@ def _setup_news_scheduler():
 
     logger = logging.getLogger(__name__)
 
-    async def fetch_military_news():
-        try:
-            from app.core.database import async_session
-            from app.services.news_fetcher import auto_fetch_news
-            from app.services.news_setting_service import get_settings
-
-            async with async_session() as db:
-                settings = await get_settings(db)
-                stats = await auto_fetch_news(db, total_count=settings.fetch_count)
-                logger.info("Daily military news fetch (count=%d): %s", settings.fetch_count, stats)
-        except Exception:
-            logger.exception("Daily news fetch failed")
-
     scheduler = AsyncIOScheduler()
 
-    # Read initial schedule time from DB (sync at startup, default 08:00)
+    # Default 08:00, will be corrected in lifespan after DB is available
     hour, minute = 8, 0
-    try:
-        from app.core.database import async_session
-        from app.services.news_setting_service import get_settings
-        import asyncio as _asyncio
-
-        async def _read_settings():
-            async with async_session() as db:
-                s = await get_settings(db)
-                return s.fetch_hour, s.fetch_minute
-
-        # Run synchronously at startup
-        loop = _asyncio.get_event_loop()
-        if loop.is_running():
-            # Can't await in sync context at module load; use defaults, will be corrected in lifespan
-            pass
-        else:
-            hour, minute = loop.run_until_complete(_read_settings())
-    except Exception:
-        pass
 
     scheduler.add_job(
-        fetch_military_news,
+        _fetch_military_news,
         CronTrigger(hour=hour, minute=minute, timezone="Asia/Shanghai"),
         id="daily_news_fetch",
         name="Daily Military News Fetch",
@@ -194,30 +179,13 @@ async def reschedule_news_job(hour: int, minute: int):
         pass
 
     _news_scheduler.add_job(
-        _get_news_job_func(),
+        _fetch_military_news,
         CronTrigger(hour=hour, minute=minute, timezone="Asia/Shanghai"),
         id="daily_news_fetch",
         name="Daily Military News Fetch",
         replace_existing=True,
     )
     logging.getLogger(__name__).info("News job rescheduled to %02d:%02d CST", hour, minute)
-
-
-def _get_news_job_func():
-    """Return the news fetch job function."""
-    async def fetch_military_news():
-        try:
-            from app.core.database import async_session
-            from app.services.news_fetcher import auto_fetch_news
-            from app.services.news_setting_service import get_settings
-
-            async with async_session() as db:
-                settings = await get_settings(db)
-                stats = await auto_fetch_news(db, total_count=settings.fetch_count)
-                logging.getLogger(__name__).info("Daily military news fetch: %s", stats)
-        except Exception:
-            logging.getLogger(__name__).exception("Daily news fetch failed")
-    return fetch_military_news
 
 
 @asynccontextmanager

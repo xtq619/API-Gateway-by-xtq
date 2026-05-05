@@ -279,7 +279,10 @@ scp D:\server-backup\.env root@新IP:/opt/api-gateway/.env
 
 # 构建并启动
 docker compose -f docker-compose.prod.yml up -d --build
-```
+
+# 后端实时日志：
+docker compose -f docker-compose.prod.yml logs backend -f
+
 
 ### 5. 恢复数据库
 

@@ -108,7 +108,7 @@ api-gateway/
 
 ## 军事资讯抓取
 
-- **数据源**：The War Zone、Defense News、Military.com、Breaking Defense
+- **数据源**：The War Zone、Defense News、C4ISRNET、Task & Purpose
 - **均匀分配**：4 个源每源取 `ceil(总数/4)` 条，去重后截断为设定数量
 - **AI 处理**：英文原文 → 中文军事摘要（80-120 字）
 - **定时任务**：APScheduler，每日北京时间指定时间自动抓取
