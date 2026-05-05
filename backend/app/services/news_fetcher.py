@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 
 RSS_SOURCES = [
     {
-        "name": "Defense News",
-        "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml",
+        "name": "The War Zone",
+        "url": "https://www.twz.com/feed",
         "default_category": "军事",
     },
     {
-        "name": "The War Zone",
-        "url": "https://www.thedrive.com/the-war-zone/rss",
+        "name": "Defense News",
+        "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml",
         "default_category": "军事",
     },
     {
@@ -39,8 +39,8 @@ RSS_SOURCES = [
     },
 ]
 
-HTTP_TIMEOUT = httpx.Timeout(15.0, connect=10.0)
-USER_AGENT = "Mozilla/5.0 (compatible; APIGateway/1.0; +https://xtq619.xyz)"
+HTTP_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 # Max concurrent LLM calls
 LLM_CONCURRENCY = 5
@@ -205,8 +205,19 @@ async def auto_fetch_news(db: AsyncSession, total_count: int = 10) -> dict:
     """Main pipeline: fetch RSS (parallel) → batch dedup → AI summarize (concurrent) → save.
 
     Evenly distributes fetch across RSS sources.
-    Expected time: ~10-20s depending on RSS source speed and LLM latency.
+    Hard timeout: 120s total.
     """
+    try:
+        return await asyncio.wait_for(
+            _auto_fetch_news_impl(db, total_count),
+            timeout=120.0,
+        )
+    except asyncio.TimeoutError:
+        logger.error("Auto-fetch timed out after 120s")
+        return {"error": "抓取超时（120秒），部分 RSS 源可能不可达", "fetched": 0, "created": 0, "skipped": 0, "errors": 0}
+
+
+async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
     model = await get_first_enabled_model(db)
     if not model:
         logger.error("No enabled model found for AI summarization")
@@ -217,7 +228,7 @@ async def auto_fetch_news(db: AsyncSession, total_count: int = 10) -> dict:
     # Even distribution: each source gets ceil(total_count / num_sources)
     per_source = math.ceil(total_count / len(RSS_SOURCES))
 
-    # Step 1: Fetch all RSS feeds in parallel
+    # Step 1: Fetch all RSS feeds in parallel (each with 10s timeout)
     rss_tasks = [fetch_rss_entries(source, max_items=per_source) for source in RSS_SOURCES]
     results = await asyncio.gather(*rss_tasks)
 

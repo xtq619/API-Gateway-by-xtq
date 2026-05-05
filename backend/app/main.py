@@ -193,7 +193,7 @@ async def reschedule_news_job(hour: int, minute: int):
         pass
 
     _news_scheduler.add_job(
-        _news_scheduler._job_defaults.get("func") or _get_news_job_func(),
+        _get_news_job_func(),
         CronTrigger(hour=hour, minute=minute, timezone="Asia/Shanghai"),
         id="daily_news_fetch",
         name="Daily Military News Fetch",
