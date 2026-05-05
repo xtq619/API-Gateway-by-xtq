@@ -42,6 +42,8 @@ services:
       MARKUP_RATIO: 1.5
       STREAM_READ_TIMEOUT: 60
       CORS_ORIGINS: '["https://${DOMAIN}","https://api.${DOMAIN}"]'
+      WX_APPID: ${WX_APPID:-}
+      WX_SECRET: ${WX_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
