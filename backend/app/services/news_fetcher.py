@@ -49,7 +49,7 @@ LLM_CONCURRENCY = 5
 async def fetch_rss_entries(source: dict, max_items: int = 10) -> list[dict]:
     """Fetch and parse an RSS/Atom feed, return list of entry dicts."""
     try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
             resp = await client.get(source["url"], headers={"User-Agent": USER_AGENT})
             resp.raise_for_status()
     except Exception as e:

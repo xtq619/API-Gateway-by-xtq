@@ -181,6 +181,7 @@ def _setup_news_scheduler():
 
 async def reschedule_news_job(hour: int, minute: int):
     """Reschedule the daily news fetch job."""
+    import logging
     global _news_scheduler
     if not _news_scheduler:
         return
