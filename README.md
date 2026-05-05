@@ -9,149 +9,174 @@
 | 后端 | Python 3.10+ / FastAPI / SQLAlchemy 2.0 / asyncpg |
 | 数据库 | PostgreSQL 15 |
 | 缓存/限流 | Redis 7 |
-| 后台任务 | ARQ (async Redis Queue) |
-| 前端 | React 18 / TypeScript / Vite / TailwindCSS / Recharts |
+| 前端 (Web) | React 19 / TypeScript / Vite / TailwindCSS 4 / Zustand / Recharts |
+| 部署 | Docker Compose + Nginx + Cloudflare Tunnel (阿里云 ECS) |
+| 域名 | xtq619.xyz (前端) / api.xtq619.xyz (API) |
+
+## 项目结构
+
+```text
+api-gateway/
+├── backend/
+│   ├── alembic/              # 数据库迁移（共 10 个）
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── config.py     # 配置（数据库、Redis、JWT、微信）
+│   │   │   ├── database.py   # 异步 SQLAlchemy 引擎
+│   │   │   ├── security.py   # bcrypt / JWT / Fernet / SHA-256
+│   │   │   ├── dependencies.py
+│   │   │   └── exceptions.py
+│   │   ├── models/
+│   │   │   ├── user.py           # 用户（含 wx_openid）
+│   │   │   ├── api_key.py        # API 密钥（SHA-256 + 模型权限）
+│   │   │   ├── model_registry.py # 模型注册表
+│   │   │   ├── billing.py        # 计费账户 + 交易记录
+│   │   │   ├── usage_log.py      # 用量日志
+│   │   │   ├── feedback.py       # 用户留言
+│   │   │   ├── ai_news.py        # 军事资讯
+│   │   │   ├── news_setting.py   # 资讯抓取配置
+│   │   │   ├── battle.py         # 擂台对战记录
+│   │   │   ├── digest.py         # SMTP 摘要配置
+│   │   │   └── user_digest.py    # 用户订阅偏好
+│   │   ├── schemas/          # Pydantic 请求/响应模型
+│   │   ├── api/
+│   │   │   ├── v1/           # 管理 API（JWT 认证）
+│   │   │   │   ├── auth.py        # 注册/登录/微信登录/微信绑定
+│   │   │   │   ├── keys.py        # API 密钥 CRUD
+│   │   │   │   ├── models.py      # 模型列表
+│   │   │   │   ├── proxy.py       # 代理接口
+│   │   │   │   ├── usage.py       # 用量统计
+│   │   │   │   ├── billing.py     # 充值/余额/交易
+│   │   │   │   ├── admin.py       # 管理后台
+│   │   │   │   ├── feedback.py    # 留言
+│   │   │   │   ├── feedback_admin.py
+│   │   │   │   ├── news_admin.py  # 军事资讯管理 + 抓取设置
+│   │   │   │   ├── digest.py      # 摘要订阅
+│   │   │   │   ├── user_digest.py
+│   │   │   │   └── battle.py      # 擂台 SSE + WebSocket
+│   │   │   └── public/       # 对外 API（OpenAI 兼容 + 公开接口）
+│   │   ├── services/
+│   │   │   ├── proxy_service.py       # 核心代理（SSE 流式 + 计费）
+│   │   │   ├── auth_service.py        # 登录注册 + 微信登录
+│   │   │   ├── billing_service.py     # 余额扣费（行锁）
+│   │   │   ├── rate_limiter.py        # Redis 滑动窗口
+│   │   │   ├── battle_service.py      # 擂台辩论逻辑
+│   │   │   ├── news_fetcher.py        # 军事 RSS 抓取 + AI 摘要（均匀分配）
+│   │   │   ├── news_setting_service.py # 资讯抓取配置读写
+│   │   │   ├── digest.py              # 每日摘要编译
+│   │   │   └── notifier.py            # SMTP 邮件发送
+│   │   ├── middleware/
+│   │   └── main.py           # FastAPI 入口 + APScheduler
+│   ├── tests/
+│   └── Dockerfile
+├── frontend/                 # React Web 前端
+│   ├── src/
+│   │   ├── pages/            # 15 个页面
+│   │   ├── components/       # Layout / ProtectedRoute / MusicPlayer / CursorRing
+│   │   ├── lib/              # api.ts (60+ 方法) / store.ts (Zustand) / AudioVisualizer.js
+│   │   └── index.css         # TailwindCSS 4 主题
+│   └── Dockerfile
+├── nginx/nginx.conf
+├── docker-compose.yml        # 本地开发
+├── docker-compose.prod.yml   # 生产部署
+├── deploy.sh
+├── start.bat                 # Windows 一键启动
+└── README.md                 # 本文件
+```
+
+## 核心功能
+
+### 后端
+
+- **统一 API 代理**：兼容 OpenAI SDK，支持流式/非流式响应，1.5x 加价
+- **API Key 管理**：SHA-256 哈希存储，有效期、启禁用、模型权限
+- **速率限制**：Redis 滑动窗口，per-key RPM
+- **用量计费**：按 token 实时扣费，预付制，行锁防并发
+- **多模型管理**：OpenAI、Anthropic、Azure、自定义模型
+- **模型擂台**：两个 AI 辩论 + 裁判评判（SSE 流式 / WebSocket）
+- **军事资讯**：4 个 RSS 源均匀分配抓取 → AI 中文摘要 → 自动发布
+- **资讯设置**：管理员可配置每日抓取数量、推送时间，支持手动触发
+- **每日摘要**：APScheduler 定时 → 编译 → SMTP 邮件推送
+- **留言反馈**：用户提交 + 管理员回复
+- **微信登录**：`/auth/wxlogin` + `/auth/wxbind`
+
+### Web 前端
+
+- 登录/注册、工作空间 Hub、仪表盘、密钥管理、用量统计、充值计费、模型列表
+- 管理后台：用户管理、**军事资讯管理**（抓取设置 + 资讯列表）、留言管理、SMTP 配置
+- 留言反馈、每日摘要、模型擂台、频谱可视化（3D 粒子云）
+
+## 军事资讯抓取
+
+- **数据源**：The War Zone、Defense News、Military.com、Breaking Defense
+- **均匀分配**：4 个源每源取 `ceil(总数/4)` 条，去重后截断为设定数量
+- **AI 处理**：英文原文 → 中文军事摘要（80-120 字）
+- **定时任务**：APScheduler，每日北京时间指定时间自动抓取
+- **管理员配置**：网页后台可修改抓取数量（1-50 条）、推送时间（时:分）
+- **手动触发**：管理员可随时点击"自动抓取"手动触发
+- **超时保护**：120 秒总超时，单源 20 秒超时
 
 ## 快速开始
 
-### 一键启动（Windows）
-
-双击项目根目录下的 `start.bat`，脚本会自动完成：
-
-1. 检测并启动 Docker Desktop
-2. 启动 PostgreSQL 和 Redis
-3. 安装后端依赖（首次）
-4. 执行数据库迁移
-5. 安装前端依赖（首次）
-6. 启动后端（端口 8000）和前端（端口 5173）
-
-启动后访问 `http://localhost:5173` 即可使用，关闭脚本窗口不会停止服务。
-
-### 手动启动
-
-#### 前置条件
-
-- Python 3.10+
-- Node.js 22+
-- PostgreSQL 15+
-- Redis 7+
-
-#### 1. 克隆并配置
+### 本地开发
 
 ```bash
-cd api-gateway
+# 启动 Docker 服务
+docker compose up -d postgres redis
 
-# 复制环境变量模板
-cp backend/.env.example backend/.env
-
-# 生成 Fernet 加密密钥（用于安全存储上游模型的 API Key）
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# 把输出的密钥填入 backend/.env 的 ENCRYPTION_KEY
-
-# 编辑 backend/.env 配置其他参数（数据库连接、JWT 密钥等）
-```
-
-#### 2. 启动基础设施
-
-```bash
-docker-compose up -d postgres redis
-```
-
-#### 3. 初始化数据库
-
-```bash
+# 后端
 cd backend
 pip install -e .
 alembic upgrade head
-```
-
-#### 4. 创建管理员和添加模型
-
-```bash
-# 创建管理员
-python -m app.cli create-admin admin@example.com admin123 Admin
-
-# 添加 OpenAI 模型
-python -m app.cli add-model openai gpt-4o "GPT-4o" \
-  "https://api.openai.com/v1" "sk-your-openai-key" 0.003 0.006 4096
-
-# 添加 Claude 模型
-python -m app.cli add-model anthropic claude-sonnet-4-6 "Claude Sonnet 4.6" \
-  "https://api.anthropic.com/v1" "sk-ant-your-key" 0.003 0.015 8192
-```
-
-#### 5. 启动后端
-
-```bash
-cd backend
 uvicorn app.main:app --reload --port 8000
-```
 
-#### 6. 启动前端
-
-```bash
+# 前端
 cd frontend
 npm install
 npm run dev
 ```
 
-访问 `http://localhost:5173` 即可使用。
+访问 `http://localhost:5173`
 
-### Docker 一键启动
+### 生产部署
 
 ```bash
-docker-compose up -d
+cd /opt/api-gateway
+git pull origin main
+docker compose -f docker-compose.prod.yml up -d --build
+
+# 运行数据库迁移
+docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade head
 ```
 
 ## API 文档
 
-启动后端后访问 `http://localhost:8000/docs` 查看 Swagger 文档。
+- Swagger: `https://api.xtq619.xyz/docs`
+- 健康检查: `https://api.xtq619.xyz/health`
 
-## 对外 API（OpenAI 兼容格式）
+## 环境变量（backend/.env）
 
-终端用户使用 API Key 调用：
+| 变量 | 说明 |
+|------|------|
+| DATABASE_URL | PostgreSQL 异步连接 |
+| REDIS_URL | Redis 连接 |
+| SECRET_KEY | JWT 签名密钥 |
+| ENCRYPTION_KEY | Fernet 密钥（加密上游 API Key） |
+| WX_APPID | 微信小程序 AppID |
+| WX_SECRET | 微信小程序 AppSecret |
+| MARKUP_RATIO | API 加价比例（默认 1.5x） |
 
-```bash
-curl http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer sk-YOUR-API-KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
-```
+## 数据库迁移记录
 
-## 项目结构
-
-```
-api-gateway/
-├── backend/
-│   ├── alembic/              # 数据库迁移
-│   ├── app/
-│   │   ├── core/             # 配置、安全、依赖注入
-│   │   ├── models/           # SQLAlchemy 模型
-│   │   ├── schemas/          # Pydantic 模型
-│   │   ├── api/              # API 路由
-│   │   │   ├── v1/           # 管理 API（JWT）
-│   │   │   └── public/       # 对外 API（OpenAI 兼容）
-│   │   ├── services/         # 业务逻辑
-│   │   ├── middleware/       # 中间件
-│   │   └── main.py           # 入口
-│   ├── tests/
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── components/       # 布局组件
-│   │   ├── pages/            # 页面
-│   │   └── lib/              # API 客户端、状态管理
-│   └── Dockerfile
-├── docker-compose.yml
-├── start.bat               # Windows 一键启动脚本
-└── README.md
-```
-
-## 核心功能
-
-- **统一 API 代理**：兼容 OpenAI SDK，支持流式/非流式响应
-- **API Key 管理**：SHA-256 哈希存储，支持有效期、启禁用
-- **速率限制**：Redis 滑动窗口，per-key RPM 限制
-- **用量计费**：按 token 实时扣费，预付制
-- **多模型管理**：支持 OpenAI、Anthropic、Azure、自定义模型
-- **管理后台**：用户管理、模型上下架、全局统计
+| 迁移 ID | 说明 |
+| ------- | ---- |
+| 6c835882e158 | 初始表结构 |
+| fa43d14845ee | API 密钥模型权限 |
+| 7a1b2c3d4e5f | 留言表 |
+| 8b2c3d4e5f6g | AI 资讯表 |
+| 9c3d4e5f6a7b | 留言回复字段 |
+| ad4e5f6a7b8c | SMTP 摘要配置 |
+| be5f6a7b8c9d | 用户摘要偏好 |
+| cf6a7b8c9d0e | 擂台记录 |
+| d1a2b3c4d5e6 | 微信 openid |
+| e2f3a4b5c6d7 | 资讯抓取配置 |
