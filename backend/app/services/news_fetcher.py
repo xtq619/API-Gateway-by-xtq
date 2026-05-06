@@ -181,6 +181,7 @@ async def summarize_with_ai(
 
         content_text = data["choices"][0]["message"]["content"]
         if not content_text or not content_text.strip():
+            logger.warning("Empty LLM response for '%s': response=%s", title[:50], json.dumps(data, ensure_ascii=False)[:500])
             raise ValueError("Empty LLM response")
 
         content_text = content_text.strip()
@@ -207,10 +208,12 @@ async def summarize_with_ai(
         return fallback, default_category, ""
     except httpx.TimeoutException as e:
         logger.warning("AI summarization timeout for '%s': %s", title[:50], e or "(no detail)")
-        return "", default_category, ""
+        fallback = content[:100] if content else title
+        return fallback, default_category, ""
     except httpx.HTTPError as e:
         logger.warning("AI summarization HTTP error for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
-        return "", default_category, ""
+        fallback = content[:100] if content else title
+        return fallback, default_category, ""
     except Exception as e:
         logger.warning("AI summarization failed for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
         fallback = content[:100] if content else title
@@ -322,7 +325,7 @@ async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
     # Step 3: Fetch full text + AI summarize concurrently
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     fetch_sem = asyncio.Semaphore(FETCH_CONCURRENCY)
-    llm_timeout = httpx.Timeout(60.0, connect=10.0)
+    llm_timeout = httpx.Timeout(120.0, connect=10.0)
     async with httpx.AsyncClient(timeout=llm_timeout) as client:
         tasks = [
             _process_one_entry(entry, model, client, sem, fetch_sem)
