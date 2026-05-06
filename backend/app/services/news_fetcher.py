@@ -139,37 +139,33 @@ async def get_first_enabled_model(db: AsyncSession) -> ModelRegistry | None:
 
 
 def _build_prompt(title: str, content: str, default_category: str) -> str:
-    content_snippet = content[:2000] if content else ""
-    return f"""你是一个军事新闻编辑。请阅读以下国外军事文章，用中文生成一条简洁的摘要（80-120字）。
-分类固定为"军事"。
+    content_snippet = content[:3000] if content else ""
+    return f"""你是一个军事新闻编辑。请阅读以下英文军事文章，完成两个任务：
 
-要求：
-1. 必须使用中文输出
-2. 如果原文是英文，请翻译并概括为中文
-3. 重点关注：武器装备、军事行动、国防政策、地缘冲突、军事科技等方面
-4. 语言简洁有力，适合移动端阅读
+任务1 - 翻译：将原文完整翻译为中文（保留所有人名、地名、装备型号、数据）
+任务2 - 摘要：用 80-120 字生成中文摘要
 
 标题：{title}
 
-内容：
+原文：
 {content_snippet}
 
 请严格按以下 JSON 格式返回，不要包含任何其他内容：
-{{"summary": "中文摘要内容", "category": "军事"}}"""
+{{"summary": "80-120字中文摘要", "translated": "中文翻译全文", "category": "军事"}}"""
 
 
 async def summarize_with_ai(
     title: str, content: str, model: ModelRegistry, default_category: str,
     client: httpx.AsyncClient,
-) -> tuple[str, str]:
-    """Call LLM to summarize an article. Returns (summary, category)."""
+) -> tuple[str, str, str]:
+    """Call LLM to translate and summarize an article. Returns (summary, category, translated)."""
     prompt = _build_prompt(title, content, default_category)
     api_key = decrypt_api_key(model.api_key_encrypted)
 
     body = {
         "model": model.model_name,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 300,
+        "max_tokens": 3000,
         "temperature": 0.3,
     }
 
@@ -198,19 +194,20 @@ async def summarize_with_ai(
         parsed = json.loads(content_text)
         summary = parsed.get("summary", title)
         category = parsed.get("category", default_category)
+        translated = parsed.get("translated", "")
         if category not in ("新闻", "论文", "工具", "军事", "其他"):
             category = default_category
-        return summary, category
+        return summary, category, translated
 
     except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
         # Structured errors: JSON parse failure, missing keys, empty response
         logger.warning("AI summarization parse error for '%s': %s", title[:50], e)
         fallback = content[:100] if content else title
-        return fallback, default_category
+        return fallback, default_category, ""
     except Exception as e:
         logger.warning("AI summarization failed for '%s': %s", title[:50], e)
         fallback = content[:100] if content else title
-        return fallback, default_category
+        return fallback, default_category, ""
 
 
 async def batch_get_duplicates(db: AsyncSession, links: list[str]) -> set[str]:
@@ -227,19 +224,19 @@ async def _process_one_entry(
     entry: dict, model: ModelRegistry, client: httpx.AsyncClient,
     sem: asyncio.Semaphore, fetch_sem: asyncio.Semaphore,
 ) -> AiNews | None:
-    """Process a single entry: fetch full text → AI summarize."""
+    """Process a single entry: fetch full text → AI translate + summarize."""
     # Step 1: Fetch full article text from the source URL
     fulltext = await fetch_article_fulltext(entry["link"], client, fetch_sem)
     content_for_ai = fulltext or entry["content_raw"] or entry["summary_raw"]
 
-    # Step 2: AI summarize
+    # Step 2: AI translate + summarize
     async with sem:
-        summary, category = await summarize_with_ai(
+        summary, category, translated = await summarize_with_ai(
             entry["title"], content_for_ai, model, entry["default_category"], client,
         )
 
-    # Store full text (or fallback to RSS content)
-    stored_content = fulltext or entry["summary_raw"]
+    # Store translated Chinese text (fallback to original if translation failed)
+    stored_content = translated if translated else (fulltext or entry["summary_raw"])
 
     return AiNews(
         title=entry["title"][:300],
