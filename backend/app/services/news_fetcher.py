@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import math
+import re
 from datetime import datetime, timezone
 
 import feedparser
@@ -45,6 +46,9 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 # Max concurrent LLM calls
 LLM_CONCURRENCY = 5
 
+# Max concurrent article fetches
+FETCH_CONCURRENCY = 5
+
 
 async def fetch_rss_entries(source: dict, max_items: int = 10) -> list[dict]:
     """Fetch and parse an RSS/Atom feed, return list of entry dicts."""
@@ -78,6 +82,37 @@ async def fetch_rss_entries(source: dict, max_items: int = 10) -> list[dict]:
             "default_category": source["default_category"],
         })
     return entries
+
+
+def _extract_article_text(html: str) -> str:
+    """Extract article text from HTML using readability."""
+    try:
+        from lxml.html import fromstring
+        from readability import Document
+
+        doc = Document(html)
+        summary_html = doc.summary()
+        tree = fromstring(summary_html)
+        text = tree.text_content()
+        # Clean up whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text[:8000]
+    except Exception:
+        return ""
+
+
+async def fetch_article_fulltext(
+    url: str, client: httpx.AsyncClient, sem: asyncio.Semaphore,
+) -> str:
+    """Fetch an article page and extract its full text."""
+    async with sem:
+        try:
+            resp = await client.get(url, headers={"User-Agent": USER_AGENT})
+            resp.raise_for_status()
+            return _extract_article_text(resp.text)
+        except Exception as e:
+            logger.warning("Failed to fetch article %s: %s", url[:80], e)
+            return ""
 
 
 async def get_first_enabled_model(db: AsyncSession) -> ModelRegistry | None:
@@ -190,19 +225,26 @@ async def batch_get_duplicates(db: AsyncSession, links: list[str]) -> set[str]:
 
 async def _process_one_entry(
     entry: dict, model: ModelRegistry, client: httpx.AsyncClient,
-    sem: asyncio.Semaphore,
+    sem: asyncio.Semaphore, fetch_sem: asyncio.Semaphore,
 ) -> AiNews | None:
-    """Process a single entry with concurrency limit."""
+    """Process a single entry: fetch full text → AI summarize."""
+    # Step 1: Fetch full article text from the source URL
+    fulltext = await fetch_article_fulltext(entry["link"], client, fetch_sem)
+    content_for_ai = fulltext or entry["content_raw"] or entry["summary_raw"]
+
+    # Step 2: AI summarize
     async with sem:
-        content_for_ai = entry["content_raw"] or entry["summary_raw"]
         summary, category = await summarize_with_ai(
             entry["title"], content_for_ai, model, entry["default_category"], client,
         )
 
+    # Store full text (or fallback to RSS content)
+    stored_content = fulltext or entry["summary_raw"]
+
     return AiNews(
         title=entry["title"][:300],
         summary=summary,
-        content=entry["summary_raw"][:5000] if entry["summary_raw"] else None,
+        content=stored_content[:5000] if stored_content else None,
         category=category,
         source_name=entry["source_name"],
         source_url=entry["link"][:1000],
@@ -263,12 +305,13 @@ async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
     # Limit to total_count
     new_entries = new_entries[:total_count]
 
-    # Step 3: AI summarize concurrently with semaphore
+    # Step 3: Fetch full text + AI summarize concurrently
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
+    fetch_sem = asyncio.Semaphore(FETCH_CONCURRENCY)
     llm_timeout = httpx.Timeout(30.0, connect=10.0)
     async with httpx.AsyncClient(timeout=llm_timeout) as client:
         tasks = [
-            _process_one_entry(entry, model, client, sem)
+            _process_one_entry(entry, model, client, sem, fetch_sem)
             for entry in new_entries
         ]
         news_results = await asyncio.gather(*tasks, return_exceptions=True)
