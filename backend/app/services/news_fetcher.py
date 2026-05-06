@@ -170,6 +170,7 @@ async def summarize_with_ai(
     }
 
     try:
+        logger.info("Calling LLM for '%s' (content_len=%d)", title[:50], len(prompt))
         resp = await client.post(
             f"{model.base_url.rstrip('/')}/chat/completions",
             json=body,
@@ -201,11 +202,17 @@ async def summarize_with_ai(
 
     except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
         # Structured errors: JSON parse failure, missing keys, empty response
-        logger.warning("AI summarization parse error for '%s': %s", title[:50], e)
+        logger.warning("AI summarization parse error for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
         fallback = content[:100] if content else title
         return fallback, default_category, ""
+    except httpx.TimeoutException as e:
+        logger.warning("AI summarization timeout for '%s': %s", title[:50], e or "(no detail)")
+        return "", default_category, ""
+    except httpx.HTTPError as e:
+        logger.warning("AI summarization HTTP error for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
+        return "", default_category, ""
     except Exception as e:
-        logger.warning("AI summarization failed for '%s': %s", title[:50], e)
+        logger.warning("AI summarization failed for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
         fallback = content[:100] if content else title
         return fallback, default_category, ""
 
@@ -315,7 +322,7 @@ async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
     # Step 3: Fetch full text + AI summarize concurrently
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     fetch_sem = asyncio.Semaphore(FETCH_CONCURRENCY)
-    llm_timeout = httpx.Timeout(30.0, connect=10.0)
+    llm_timeout = httpx.Timeout(60.0, connect=10.0)
     async with httpx.AsyncClient(timeout=llm_timeout) as client:
         tasks = [
             _process_one_entry(entry, model, client, sem, fetch_sem)
