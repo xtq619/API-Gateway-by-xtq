@@ -18,6 +18,7 @@ class UserDigestPref(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     email: Mapped[str] = mapped_column(String(255), default="", server_default="")
     send_time: Mapped[str] = mapped_column(String(5), default="08:00", server_default="08:00")  # HH:MM
+    last_sent_date: Mapped[str | None] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),

@@ -57,8 +57,6 @@ def _setup_digest_scheduler():
 
     logger = logging.getLogger(__name__)
 
-    _last_sent: dict[str, str] = {}  # user_id -> "YYYY-MM-DD" to prevent duplicate sends
-
     async def check_and_send():
         from app.core.database import async_session
         from app.models.digest import DigestSetting
@@ -81,12 +79,13 @@ def _setup_digest_scheduler():
                 if not smtp or not smtp.smtp_user or not smtp.smtp_password:
                     return  # SMTP not configured, skip
 
-                # Get all enabled users whose send_time matches now
+                # Get all enabled users whose send_time matches now and haven't been sent today
                 result = await db.execute(
                     select(UserDigestPref).where(
                         UserDigestPref.is_enabled == True,
                         UserDigestPref.email != "",
                         UserDigestPref.send_time == current_time,
+                        (UserDigestPref.last_sent_date != today) | (UserDigestPref.last_sent_date.is_(None)),
                     )
                 )
                 users = result.scalars().all()
@@ -101,10 +100,6 @@ def _setup_digest_scheduler():
                     return
 
                 for user_pref in users:
-                    uid = str(user_pref.user_id)
-                    if _last_sent.get(uid) == today:
-                        continue  # Already sent today
-
                     success = await send_digest_email(
                         digest_markdown=digest,
                         smtp_host=smtp.smtp_host,
@@ -115,7 +110,8 @@ def _setup_digest_scheduler():
                         recipients=[user_pref.email],
                     )
                     if success:
-                        _last_sent[uid] = today
+                        user_pref.last_sent_date = today
+                        await db.commit()
                         logger.info("Digest sent to %s", user_pref.email)
         except Exception:
             logger.exception("Digest check job failed")
