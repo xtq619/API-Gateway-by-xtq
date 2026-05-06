@@ -165,7 +165,7 @@ async def summarize_with_ai(
     body = {
         "model": model.model_name,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 3000,
+        "max_tokens": 8000,
         "temperature": 0.3,
     }
 
@@ -203,7 +203,8 @@ async def summarize_with_ai(
 
     except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
         # Structured errors: JSON parse failure, missing keys, empty response
-        logger.warning("AI summarization parse error for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
+        raw = locals().get("content_text", "")
+        logger.warning("AI summarization parse error for '%s': [%s] %s\nraw: %s", title[:50], type(e).__name__, repr(e), raw[-300:])
         fallback = content[:100] if content else title
         return fallback, default_category, ""
     except httpx.TimeoutException as e:
