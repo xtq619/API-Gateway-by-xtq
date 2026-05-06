@@ -150,7 +150,7 @@ def _build_prompt(title: str, content: str, default_category: str) -> str:
 原文：
 {content_snippet}
 
-请严格按以下 JSON 格式返回，不要包含任何其他内容：
+请严格按以下 JSON 格式返回，不要包含任何其他内容，不要展示思考过程：
 {{"summary": "80-120字中文摘要", "translated": "中文翻译全文", "category": "军事"}}"""
 
 
@@ -165,7 +165,7 @@ async def summarize_with_ai(
     body = {
         "model": model.model_name,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 8000,
+        "max_tokens": 16384,
         "temperature": 0.3,
     }
 
@@ -179,10 +179,16 @@ async def summarize_with_ai(
         resp.raise_for_status()
         data = resp.json()
 
-        content_text = data["choices"][0]["message"]["content"]
-        if not content_text or not content_text.strip():
-            logger.warning("Empty LLM response for '%s': response=%s", title[:50], json.dumps(data, ensure_ascii=False)[:500])
-            raise ValueError("Empty LLM response")
+        content_text = data["choices"][0]["message"].get("content", "") or ""
+        if not content_text.strip():
+            # Thinking models (e.g. deepseek-v4-pro) may put output in reasoning_content
+            reasoning = data["choices"][0]["message"].get("reasoning_content", "") or ""
+            if reasoning.strip():
+                content_text = reasoning.strip()
+                logger.info("Using reasoning_content for '%s' (len=%d)", title[:50], len(content_text))
+            else:
+                logger.warning("Empty LLM response for '%s': response=%s", title[:50], json.dumps(data, ensure_ascii=False)[:500])
+                raise ValueError("Empty LLM response")
 
         content_text = content_text.strip()
 
