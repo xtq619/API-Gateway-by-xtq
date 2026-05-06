@@ -19,28 +19,30 @@ def _build_digest_prompt(news_list: list[dict]) -> str:
         content = n.get("content") or n["summary"]
         content_snippet = content[:1500] if content else ""
         lines.append(
-            f"{i}. [{n['category']}] {n['title']}\n"
-            f"   原文：{content_snippet}\n"
-            f"   来源：{n['source_name']} | 链接：{n['source_url']}"
+            f"--- 第{i}条 ---\n"
+            f"原标题：{n['title']}\n"
+            f"来源：{n['source_name']}\n"
+            f"链接：{n['source_url']}\n"
+            f"原文内容：\n{content_snippet}"
         )
 
-    articles_text = "\n".join(lines)
+    articles_text = "\n\n".join(lines)
 
-    return f"""你是一位专业的军事新闻编辑。以下是今天抓取到的 {len(news_list)} 条国外军事新闻，请逐条翻译为中文并输出完整内容。
+    return f"""你是军事新闻翻译专家。请将以下 {len(news_list)} 条英文军事新闻逐条翻译为中文。
 
-要求：
-1. 每条新闻单独输出，格式：
-   ### 序号. 中文标题
-   - **来源**：来源名称 | [原文链接](链接)
-   - **正文**：将原文完整翻译为中文，保留关键细节、数据、人名、装备名称等
-2. 翻译要准确流畅，军事术语使用国内常用译法
-3. 如果原文较长，可以适当精简但不要丢失核心信息
-4. 全部用中文输出
+【严格要求】
+1. 所有输出必须是中文，绝对禁止输出英文原文
+2. 标题翻译为中文
+3. 正文完整翻译，保留所有人名、地名、装备型号、数据
+4. 每条格式：
+   ### 中文标题
+   - **来源**：来源名 | [原文链接](URL)
+   - **正文**：中文翻译全文
 
-新闻列表：
+英文新闻原文：
 {articles_text}
 
-请用 Markdown 格式输出，适合邮件阅读。"""
+请开始翻译，全部用中文输出："""
 
 
 async def compile_daily_digest(db: AsyncSession) -> str | None:
