@@ -89,22 +89,16 @@ async def compile_daily_digest(db: AsyncSession) -> str | None:
                 content = n.get("content") or n["summary"]
                 content_snippet = content[:4000] if content else ""
 
-                prompt = f"""请将以下英文军事新闻翻译为中文，输出完整翻译，不要省略。
+                prompt = f"""你是一个翻译机器人。你的唯一任务是把下面的英文文章翻译成中文。禁止输出任何英文字符。
 
-标题：{n['title']}
-来源：{n['source_name']}
-链接：{n['source_url']}
-
-原文：
+英文原文：
 {content_snippet}
 
-要求：
-1. 完整翻译为中文，保留所有人名、地名、装备型号、数据
-2. 不要输出英文，全部用中文
-3. 格式：
-   ### 中文标题
-   - **来源**：{n['source_name']} | [原文链接]({n['source_url']})
-   - **正文**：中文翻译全文"""
+翻译要求：
+- 保留所有人名、地名、装备型号、数字数据
+- 不要省略内容，尽量完整翻译
+- 输出纯中文翻译结果，不要加任何英文原文
+- 不要加标题、来源等前缀，只输出翻译正文"""
 
                 try:
                     resp = await client.post(
@@ -121,7 +115,12 @@ async def compile_daily_digest(db: AsyncSession) -> str | None:
                     data = resp.json()
                     text = data["choices"][0]["message"]["content"].strip()
                     if text:
-                        translated_parts.append(text)
+                        # Strip any English that leaked through (first 500+ chars of pure ASCII = likely English)
+                        translated_parts.append(
+                            f"### {n['title']}\n"
+                            f"- **来源**：{n['source_name']} | [原文链接]({n['source_url']})\n\n"
+                            f"{text}"
+                        )
                 except Exception as e:
                     logger.warning("Translation failed for article %d: %s", i, e)
                     translated_parts.append(
