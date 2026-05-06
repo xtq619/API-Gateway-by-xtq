@@ -44,10 +44,10 @@ HTTP_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 # Max concurrent LLM calls
-LLM_CONCURRENCY = 5
+LLM_CONCURRENCY = 10
 
 # Max concurrent article fetches
-FETCH_CONCURRENCY = 5
+FETCH_CONCURRENCY = 10
 
 
 async def fetch_rss_entries(source: dict, max_items: int = 10) -> list[dict]:
@@ -274,16 +274,16 @@ async def auto_fetch_news(db: AsyncSession, total_count: int = 10) -> dict:
     """Main pipeline: fetch RSS (parallel) → batch dedup → AI summarize (concurrent) → save.
 
     Evenly distributes fetch across RSS sources.
-    Hard timeout: 120s total.
+    Hard timeout: 300s total.
     """
     try:
         return await asyncio.wait_for(
             _auto_fetch_news_impl(db, total_count),
-            timeout=120.0,
+            timeout=300.0,
         )
     except asyncio.TimeoutError:
-        logger.error("Auto-fetch timed out after 120s")
-        return {"error": "抓取超时（120秒），部分 RSS 源可能不可达", "fetched": 0, "created": 0, "skipped": 0, "errors": 0}
+        logger.error("Auto-fetch timed out after 300s")
+        return {"error": "抓取超时（300秒），部分 RSS 源可能不可达", "fetched": 0, "created": 0, "skipped": 0, "errors": 0}
 
 
 async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
