@@ -224,24 +224,34 @@ async def _process_one_entry(
     entry: dict, model: ModelRegistry, client: httpx.AsyncClient,
     sem: asyncio.Semaphore, fetch_sem: asyncio.Semaphore,
 ) -> AiNews | None:
-    """Process a single entry: fetch full text → AI translate + summarize."""
+    """Process a single entry: fetch full text → AI translate + summarize.
+
+    Returns None if translation fails (article won't be saved).
+    """
     # Step 1: Fetch full article text from the source URL
     fulltext = await fetch_article_fulltext(entry["link"], client, fetch_sem)
     content_for_ai = fulltext or entry["content_raw"] or entry["summary_raw"]
 
-    # Step 2: AI translate + summarize
+    # Step 2: AI translate + summarize (retry up to 2 times)
     async with sem:
-        summary, category, translated = await summarize_with_ai(
-            entry["title"], content_for_ai, model, entry["default_category"], client,
-        )
+        for attempt in range(3):
+            summary, category, translated = await summarize_with_ai(
+                entry["title"], content_for_ai, model, entry["default_category"], client,
+            )
+            if translated:
+                break
+            if attempt < 2:
+                logger.info("Translation retry %d for '%s'", attempt + 1, entry["title"][:50])
 
-    # Store translated Chinese text (fallback to original if translation failed)
-    stored_content = translated if translated else (fulltext or entry["summary_raw"])
+    # Skip this article if translation failed
+    if not translated:
+        logger.warning("Translation failed after 3 attempts, skipping: '%s'", entry["title"][:50])
+        return None
 
     return AiNews(
         title=entry["title"][:300],
         summary=summary,
-        content=stored_content[:5000] if stored_content else None,
+        content=translated[:5000],
         category=category,
         source_name=entry["source_name"],
         source_url=entry["link"][:1000],
