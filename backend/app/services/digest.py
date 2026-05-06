@@ -16,17 +16,26 @@ logger = logging.getLogger(__name__)
 def _build_digest_prompt(news_list: list[dict]) -> str:
     lines = []
     for i, n in enumerate(news_list, 1):
-        lines.append(f"{i}. [{n['category']}] {n['title']}\n   摘要：{n['summary']}\n   来源：{n['source_name']}")
+        content = n.get("content") or n["summary"]
+        content_snippet = content[:1500] if content else ""
+        lines.append(
+            f"{i}. [{n['category']}] {n['title']}\n"
+            f"   原文：{content_snippet}\n"
+            f"   来源：{n['source_name']} | 链接：{n['source_url']}"
+        )
 
     articles_text = "\n".join(lines)
 
-    return f"""你是一位专业的 AI 行业分析师。以下是今天抓取到的 {len(news_list)} 条 AI 新闻，请为我编写一份简洁有力的每日摘要日报。
+    return f"""你是一位专业的军事新闻编辑。以下是今天抓取到的 {len(news_list)} 条国外军事新闻，请逐条翻译为中文并输出完整内容。
 
 要求：
-1. 用 3-5 句话总结今天 AI 领域的整体动态和趋势
-2. 按重要程度选出 Top 5 新闻，每条用：**标题** + 一句话核心内容 + 链接
-3. 最后给出一段「今日观察」：对行业的简单点评或值得关注的方向
-4. 全部用中文，保持简洁专业
+1. 每条新闻单独输出，格式：
+   ### 序号. 中文标题
+   - **来源**：来源名称 | [原文链接](链接)
+   - **正文**：将原文完整翻译为中文，保留关键细节、数据、人名、装备名称等
+2. 翻译要准确流畅，军事术语使用国内常用译法
+3. 如果原文较长，可以适当精简但不要丢失核心信息
+4. 全部用中文输出
 
 新闻列表：
 {articles_text}
@@ -54,6 +63,7 @@ async def compile_daily_digest(db: AsyncSession) -> str | None:
         {
             "title": item.title,
             "summary": item.summary,
+            "content": item.content,
             "category": item.category,
             "source_name": item.source_name,
             "source_url": item.source_url,
@@ -93,11 +103,15 @@ async def compile_daily_digest(db: AsyncSession) -> str | None:
 def _build_fallback_digest(news_list: list[dict]) -> str:
     """Build a simple digest without LLM when model is unavailable."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    lines = [f"# AI 日报 — {today}\n"]
-    lines.append(f"今天共抓取 **{len(news_list)}** 条 AI 新闻：\n")
+    lines = [f"# 军事日报 — {today}\n"]
+    lines.append(f"今天共抓取 **{len(news_list)}** 条军事新闻：\n")
 
     for i, n in enumerate(news_list, 1):
-        link = f"[链接]({n['source_url']})" if n.get("source_url") else ""
-        lines.append(f"{i}. **[{n['category']}] {n['title']}** — {n['summary'][:80]}... {link}")
+        link = f"[原文链接]({n['source_url']})" if n.get("source_url") else ""
+        content = n.get("content") or n["summary"]
+        lines.append(f"### {i}. {n['title']}")
+        lines.append(f"- **来源**：{n['source_name']} | {link}")
+        lines.append(f"- **摘要**：{content[:300]}")
+        lines.append("")
 
     return "\n".join(lines)
