@@ -17,32 +17,32 @@ def _build_digest_prompt(news_list: list[dict]) -> str:
     lines = []
     for i, n in enumerate(news_list, 1):
         content = n.get("content") or n["summary"]
-        content_snippet = content[:1500] if content else ""
+        content_snippet = content[:800] if content else ""
         lines.append(
             f"--- 第{i}条 ---\n"
             f"原标题：{n['title']}\n"
             f"来源：{n['source_name']}\n"
             f"链接：{n['source_url']}\n"
-            f"原文内容：\n{content_snippet}"
+            f"原文摘要：\n{content_snippet}"
         )
 
     articles_text = "\n\n".join(lines)
 
-    return f"""你是军事新闻翻译专家。请将以下 {len(news_list)} 条英文军事新闻逐条翻译为中文。
+    return f"""你是军事新闻翻译专家。请将以下 {len(news_list)} 条英文军事新闻翻译为中文。
 
 【严格要求】
-1. 所有输出必须是中文，绝对禁止输出英文原文
-2. 标题翻译为中文
-3. 正文完整翻译，保留所有人名、地名、装备型号、数据
+1. 所有输出必须是中文，绝对禁止输出英文
+2. 标题翻译为中文标题
+3. 正文：根据原文内容，用中文撰写 150-300 字的详细摘要，保留关键数据、装备名称、人物
 4. 每条格式：
    ### 中文标题
    - **来源**：来源名 | [原文链接](URL)
-   - **正文**：中文翻译全文
+   - **正文**：中文详细摘要
 
-英文新闻原文：
+英文新闻：
 {articles_text}
 
-请开始翻译，全部用中文输出："""
+请全部用中文输出："""
 
 
 async def compile_daily_digest(db: AsyncSession) -> str | None:
@@ -110,10 +110,9 @@ def _build_fallback_digest(news_list: list[dict]) -> str:
 
     for i, n in enumerate(news_list, 1):
         link = f"[原文链接]({n['source_url']})" if n.get("source_url") else ""
-        content = n.get("content") or n["summary"]
         lines.append(f"### {i}. {n['title']}")
         lines.append(f"- **来源**：{n['source_name']} | {link}")
-        lines.append(f"- **摘要**：{content[:300]}")
+        lines.append(f"- **摘要**：{n['summary']}")
         lines.append("")
 
     return "\n".join(lines)
