@@ -120,7 +120,7 @@ export default function AiNews() {
 
                           {item.content && (
                             <>
-                              <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 mt-3' : 'max-h-0'}`}>
+                              <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-[2000px] mt-3' : 'max-h-0'}`}>
                                 <div className="border-t border-[rgba(255,255,255,0.06)] pt-3 mt-1">
                                   <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(235,230,220,0.88)' }}>{item.content}</p>
                                 </div>
