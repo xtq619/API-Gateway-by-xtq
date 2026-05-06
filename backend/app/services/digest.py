@@ -78,25 +78,64 @@ async def compile_daily_digest(db: AsyncSession) -> str | None:
         logger.error("No enabled model for digest compilation")
         return _build_fallback_digest(news_dicts)
 
-    prompt = _build_digest_prompt(news_dicts)
     api_key = decrypt_api_key(model.api_key_encrypted)
+    today = now.strftime("%Y-%m-%d")
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            resp = await client.post(
-                f"{model.base_url.rstrip('/')}/chat/completions",
-                json={
-                    "model": model.model_name,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 2000,
-                    "temperature": 0.5,
-                },
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"].strip()
-            return content
+            # Translate each article individually
+            translated_parts = []
+            for i, n in enumerate(news_dicts, 1):
+                content = n.get("content") or n["summary"]
+                content_snippet = content[:4000] if content else ""
+
+                prompt = f"""请将以下英文军事新闻翻译为中文，输出完整翻译，不要省略。
+
+标题：{n['title']}
+来源：{n['source_name']}
+链接：{n['source_url']}
+
+原文：
+{content_snippet}
+
+要求：
+1. 完整翻译为中文，保留所有人名、地名、装备型号、数据
+2. 不要输出英文，全部用中文
+3. 格式：
+   ### 中文标题
+   - **来源**：{n['source_name']} | [原文链接]({n['source_url']})
+   - **正文**：中文翻译全文"""
+
+                try:
+                    resp = await client.post(
+                        f"{model.base_url.rstrip('/')}/chat/completions",
+                        json={
+                            "model": model.model_name,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "max_tokens": 2000,
+                            "temperature": 0.3,
+                        },
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    text = data["choices"][0]["message"]["content"].strip()
+                    if text:
+                        translated_parts.append(text)
+                except Exception as e:
+                    logger.warning("Translation failed for article %d: %s", i, e)
+                    translated_parts.append(
+                        f"### {n['title']}\n"
+                        f"- **来源**：{n['source_name']} | [原文链接]({n['source_url']})\n"
+                        f"- **摘要**：{n['summary']}"
+                    )
+
+            if not translated_parts:
+                return _build_fallback_digest(news_dicts)
+
+            header = f"# 军事日报 — {today}\n\n今天共 **{len(news_dicts)}** 条军事新闻：\n\n"
+            return header + "\n\n---\n\n".join(translated_parts)
+
     except Exception as e:
         logger.error("Digest compilation failed: %s", e)
         return _build_fallback_digest(news_dicts)
