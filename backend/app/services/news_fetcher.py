@@ -391,7 +391,7 @@ async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
     for result in news_results:
         if isinstance(result, Exception):
             stats["errors"] += 1
-            logger.warning("Error processing entry: %s", result)
+            logger.warning("Error processing entry: [%s] %s", type(result).__name__, repr(result))
             continue
         if result is not None:
             db.add(result)
