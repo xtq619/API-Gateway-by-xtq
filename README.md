@@ -71,9 +71,9 @@ api-gateway/
 │   └── Dockerfile
 ├── frontend/                 # React Web 前端
 │   ├── src/
-│   │   ├── pages/            # 15 个页面
+│   │   ├── pages/            # 14 个页面
 │   │   ├── components/       # Layout / ProtectedRoute / MusicPlayer / CursorRing
-│   │   ├── lib/              # api.ts (60+ 方法) / store.ts (Zustand) / AudioVisualizer.js
+│   │   ├── lib/              # api.ts (60+ 方法) / store.ts (Zustand)
 │   │   └── index.css         # TailwindCSS 4 主题
 │   └── Dockerfile
 ├── nginx/nginx.conf
@@ -104,7 +104,7 @@ api-gateway/
 
 - 登录/注册、工作空间 Hub、仪表盘、密钥管理、用量统计、充值计费、模型列表
 - 管理后台：用户管理、**军事资讯管理**（抓取设置 + 资讯列表）、留言管理、SMTP 配置
-- 留言反馈、每日摘要、模型擂台、频谱可视化（3D 粒子云）
+- 留言反馈、每日摘要、模型擂台
 
 ## 军事资讯抓取
 

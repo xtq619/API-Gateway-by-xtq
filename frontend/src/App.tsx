@@ -16,7 +16,6 @@ import Battle from './pages/Battle';
 import PublicFeedback from './pages/PublicFeedback';
 import AiNews from './pages/AiNews';
 import Digest from './pages/Digest';
-import Visualizer from './pages/Visualizer';
 import MusicPlayer from './components/MusicPlayer';
 
 const queryClient = new QueryClient();
@@ -41,10 +40,6 @@ export default function App() {
 
           <Route path="/battle" element={<ProtectedRoute />}>
             <Route index element={<Battle />} />
-          </Route>
-
-          <Route path="/visualizer" element={<ProtectedRoute />}>
-            <Route index element={<Visualizer />} />
           </Route>
 
           <Route element={<ProtectedRoute />}>
