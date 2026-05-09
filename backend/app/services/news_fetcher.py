@@ -287,7 +287,7 @@ async def fetch_from_proxy(per_source: int = 5) -> list[dict]:
     Proxy articles already have fulltext, so fetch_article_fulltext will be skipped.
     """
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0), follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0), follow_redirects=True, verify=False) as client:
             resp = await client.post(
                 f"{SILICON_VALLEY_PROXY}/fetch_batch",
                 json={"per_source": per_source},
