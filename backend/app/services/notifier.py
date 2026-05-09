@@ -74,52 +74,48 @@ async def send_encrypted_email(
     smtp_password: str,
     smtp_sender: str,
     recipients: list[str],
+    source_name: str = "",
 ) -> bool:
-    """Send encrypted content as a .txt attachment. Email body reveals nothing about the article."""
+    """Send encrypted content as a .txt attachment, disguised as a normal news digest."""
     if not smtp_user or not smtp_password or not recipients:
         return False
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    prefix = f"[{source_name}] " if source_name else ""
 
     msg = MIMEMultipart()
-    msg["Subject"] = f"加密文件 — {today}"
+    msg["Subject"] = f"{prefix}AI 日报 — {today}"
     msg["From"] = smtp_sender or smtp_user
     msg["To"] = ", ".join(recipients)
 
     body_text = (
-        "这是一封包含加密内容的邮件。\n\n"
-        "请使用解密工具查看原文：https://xtq619.xyz/decrypt.html\n"
-        "（也可将解密工具下载到本地，离线使用）\n\n"
-        "解密步骤：\n"
-        "1. 打开解密工具\n"
-        "2. 将附件中的密文内容粘贴到输入框\n"
-        "3. 输入解密密码\n"
-        "4. 点击解密"
+        "今日资讯已整理完毕，请查收附件原文。\n\n"
+        "在线阅读：https://xtq619.xyz/decrypt.html"
     )
     body_html = (
-        '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.8">'
-        "<p>这是一封包含加密内容的邮件。</p>"
-        '<p>请使用解密工具查看原文：<a href="https://xtq619.xyz/decrypt.html">https://xtq619.xyz/decrypt.html</a></p>'
-        '<p style="color:#888;font-size:13px">也可将解密工具下载到本地，离线使用</p>'
-        "<hr style='border:none;border-top:1px solid #eee;margin:20px 0'>"
-        "<p><strong>解密步骤：</strong></p>"
-        "<ol>"
-        "<li>打开解密工具</li>"
-        "<li>将附件中的密文内容粘贴到输入框</li>"
-        "<li>输入解密密码</li>"
-        "<li>点击解密</li>"
-        "</ol>"
+        '<div style="font-family:-apple-system,Segoe UI,sans-serif;'
+        'max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.8">'
+        '<div style="border-bottom:2px solid #4f46e5;padding-bottom:12px;margin-bottom:20px">'
+        '<h1 style="color:#4f46e5;margin:0;font-size:20px">AI 日报</h1>'
+        f'<span style="color:#888;font-size:13px">{today}</span>'
+        "</div>"
+        "<p>今日资讯已整理完毕，请查收附件原文。</p>"
+        '<p><a href="https://xtq619.xyz/decrypt.html" '
+        'style="display:inline-block;padding:8px 20px;background:#4f46e5;color:#fff;'
+        'text-decoration:none;border-radius:4px;font-size:13px">在线阅读</a></p>'
+        "<hr style='border:none;border-top:1px solid #eee;margin:30px 0'>"
+        '<p style="color:#999;font-size:12px">由 API Gateway 自动编译推送</p>'
         "</div>"
     )
 
     msg.attach(MIMEText(body_text, "plain", "utf-8"))
     msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-    # Attach encrypted text as .txt file
+    # Attach encrypted text as .txt file with a normal name
     attachment = MIMEBase("text", "plain")
     attachment.set_payload(encrypted_text.encode("utf-8"))
     encoders.encode_base64(attachment)
-    attachment.add_header("Content-Disposition", "attachment", filename="encrypted.txt")
+    attachment.add_header("Content-Disposition", "attachment", filename="原文.txt")
     msg.attach(attachment)
 
     def _send_sync():
