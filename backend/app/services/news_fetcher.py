@@ -240,6 +240,9 @@ async def batch_get_duplicates(db: AsyncSession, links: list[str]) -> set[str]:
     return {row[0] for row in result.fetchall()}
 
 
+SENSITIVE_SOURCES = {"自由時報"}
+
+
 async def _process_one_entry(
     entry: dict, model: ModelRegistry, client: httpx.AsyncClient,
     sem: asyncio.Semaphore, fetch_sem: asyncio.Semaphore,
@@ -248,6 +251,8 @@ async def _process_one_entry(
 
     Returns None if translation fails (article won't be saved).
     """
+    is_sensitive = entry["source_name"] in SENSITIVE_SOURCES
+
     # Step 1: Fetch full article text from the source URL
     fulltext = await fetch_article_fulltext(entry["link"], client, fetch_sem)
     content_for_ai = fulltext or entry["content_raw"] or entry["summary_raw"]
@@ -275,7 +280,8 @@ async def _process_one_entry(
         category=category,
         source_name=entry["source_name"],
         source_url=entry["link"][:1000],
-        is_published=True,
+        is_published=not is_sensitive,
+        is_sensitive=is_sensitive,
         created_at=datetime.now(timezone.utc),
     )
 

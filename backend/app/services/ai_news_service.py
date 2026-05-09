@@ -7,8 +7,8 @@ from app.models.ai_news import AiNews
 
 
 async def list_published(db: AsyncSession, limit: int, offset: int, category: str | None) -> tuple[list[AiNews], int]:
-    q = select(AiNews).where(AiNews.is_published == True)
-    count_q = select(func.count(AiNews.id)).where(AiNews.is_published == True)
+    q = select(AiNews).where(AiNews.is_published == True, AiNews.is_sensitive == False)
+    count_q = select(func.count(AiNews.id)).where(AiNews.is_published == True, AiNews.is_sensitive == False)
 
     if category:
         q = q.where(AiNews.category == category)

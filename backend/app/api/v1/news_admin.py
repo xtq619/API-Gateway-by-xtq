@@ -3,11 +3,13 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db, async_session
 from app.core.dependencies import require_admin
-from app.schemas.ai_news import NewsCreate, NewsList, NewsResponse, NewsUpdate
+from app.models.user import User
+from app.schemas.ai_news import NewsCreate, NewsList, NewsResponse, NewsUpdate, SendNewsRequest
 from app.services import ai_news_service
 from app.services import news_setting_service
 from app.services.news_fetcher import RSS_SOURCES
@@ -173,3 +175,59 @@ async def delete_news(
         raise HTTPException(status_code=404, detail="不存在")
     await ai_news_service.delete_news(db, n)
     return None
+
+
+@router.post("/{news_id}/send")
+async def send_news_to_user(
+    news_id: str,
+    req: SendNewsRequest,
+    user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """将指定文章通过邮件发送给指定用户"""
+    from app.models.digest import DigestSetting
+    from app.services.notifier import send_digest_email
+
+    # Get article
+    article = await ai_news_service.get_by_id(db, uuid.UUID(news_id))
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+
+    # Get recipient
+    recipient = await db.get(User, uuid.UUID(req.user_id))
+    if not recipient:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not recipient.email:
+        raise HTTPException(status_code=400, detail="该用户没有邮箱")
+
+    # Get SMTP settings
+    result = await db.execute(select(DigestSetting).limit(1))
+    setting = result.scalar_one_or_none()
+    if not setting or not setting.smtp_user or not setting.smtp_password:
+        raise HTTPException(status_code=400, detail="请先配置 SMTP 邮箱信息")
+
+    # Compose email content
+    link = f"\n\n[原文链接]({article.source_url})" if article.source_url else ""
+    content = article.content or article.summary or ""
+    digest_markdown = (
+        f"# {article.title}\n\n"
+        f"**来源**：{article.source_name}\n\n"
+        f"{content}"
+        f"{link}"
+    )
+
+    success = await send_digest_email(
+        digest_markdown=digest_markdown,
+        smtp_host=setting.smtp_host,
+        smtp_port=setting.smtp_port,
+        smtp_user=setting.smtp_user,
+        smtp_password=setting.smtp_password,
+        smtp_sender=setting.smtp_sender or setting.smtp_user,
+        recipients=[recipient.email],
+        subject_prefix=f"[{article.source_name}] ",
+    )
+
+    if success:
+        return {"message": f"已发送到 {recipient.email}"}
+    else:
+        raise HTTPException(status_code=500, detail="发送失败，请检查 SMTP 配置")

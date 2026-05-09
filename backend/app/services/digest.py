@@ -19,7 +19,7 @@ async def compile_daily_digest(db: AsyncSession) -> str | None:
 
     result = await db.execute(
         select(AiNews)
-        .where(AiNews.created_at >= today_start, AiNews.is_published == True)
+        .where(AiNews.created_at >= today_start, AiNews.is_published == True, AiNews.is_sensitive == False)
         .order_by(AiNews.created_at.desc())
     )
     news_items = result.scalars().all()

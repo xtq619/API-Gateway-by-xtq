@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Trash2, Edit2, Plus, RefreshCw, Save, Send, Settings } from 'lucide-react';
+import { Trash2, Edit2, Plus, RefreshCw, Save, Send, Settings, Mail } from 'lucide-react';
 
 export default function Admin() {
   const [users, setUsers] = useState<any[]>([]);
@@ -98,6 +98,9 @@ export default function Admin() {
   const [fetchResult, setFetchResult] = useState<string | null>(null);
   const [selectedNews, setSelectedNews] = useState<Set<string>>(new Set());
   const [showNewsSettings, setShowNewsSettings] = useState(false);
+  const [sendTarget, setSendTarget] = useState<string | null>(null);
+  const [sendUserId, setSendUserId] = useState('');
+  const [sending, setSending] = useState(false);
   const [newsSettings, setNewsSettings] = useState({ fetch_count: 10, fetch_hour: 8, fetch_minute: 0 });
   const [savingNewsSettings, setSavingNewsSettings] = useState(false);
   const [newsForm, setNewsForm] = useState({
@@ -190,6 +193,27 @@ export default function Admin() {
       setFetchResult('网络错误');
     }
     setAutoFetching(false);
+  };
+
+  const handleSendNews = async () => {
+    if (!sendTarget || !sendUserId) return;
+    setSending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await api.adminSendNewsToUser(sendTarget, sendUserId);
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(data.message || '已发送');
+        setSendTarget(null);
+        setSendUserId('');
+      } else {
+        setError(data.detail?.message || data.detail || '发送失败');
+      }
+    } catch {
+      setError('发送失败');
+    }
+    setSending(false);
   };
 
   const loadNewsSettings = async () => {
@@ -560,6 +584,7 @@ export default function Admin() {
                   <th className="text-left p-3 font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider font-normal">标题</th>
                   <th className="text-left p-3 font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider font-normal">分类</th>
                   <th className="text-left p-3 font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider font-normal">状态</th>
+                  <th className="text-left p-3 font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider font-normal">标记</th>
                   <th className="text-left p-3 font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider font-normal">日期</th>
                   <th className="text-left p-3 font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider font-normal">操作</th>
                 </tr>
@@ -580,9 +605,15 @@ export default function Admin() {
                         {item.is_published ? '已发布' : '草稿'}
                       </span>
                     </td>
+                    <td className="p-3">
+                      {item.is_sensitive && (
+                        <span className="text-[10px] font-mono tracking-wider px-2 py-0.5 text-amber-400 bg-amber-400/10 rounded">敏感</span>
+                      )}
+                    </td>
                     <td className="p-3 text-[var(--color-text-dim)] text-[11px] font-mono">{new Date(item.created_at).toLocaleDateString('zh-CN')}</td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
+                        <button onClick={() => { setSendTarget(item.id); setSendUserId(''); }} className="text-[var(--color-text-dim)] hover:text-[var(--color-accent)] transition-colors" title="发送邮件"><Mail size={13} /></button>
                         <button onClick={() => handleEditNews(item.id)} className="text-[var(--color-text-dim)] hover:text-[var(--color-text)] transition-colors"><Edit2 size={13} /></button>
                         <button onClick={() => handleDeleteNews(item.id)} className="text-[var(--color-text-dim)] hover:text-[var(--color-danger)] transition-colors"><Trash2 size={13} /></button>
                       </div>
@@ -592,6 +623,25 @@ export default function Admin() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {tab === 'news' && sendTarget && (
+        <div className="glass-card p-4 mt-4">
+          <h4 className="font-mono text-[12px] text-[var(--color-text)] tracking-wider mb-3">发送文章到用户邮箱</h4>
+          <div className="flex items-center gap-3">
+            <select value={sendUserId} onChange={e => setSendUserId(e.target.value)} className={inputClass + ' max-w-xs'}>
+              <option value="">选择用户...</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+              ))}
+            </select>
+            <button onClick={handleSendNews} disabled={sending || !sendUserId}
+              className="px-4 py-2 text-[11px] font-mono tracking-wider bg-[var(--color-accent)] text-black border border-[var(--color-accent)] transition-opacity hover:opacity-85 disabled:opacity-30 cursor-pointer">
+              {sending ? '发送中...' : '确认发送'}
+            </button>
+            <button onClick={() => setSendTarget(null)} className={btnClass}>取消</button>
+          </div>
         </div>
       )}
 

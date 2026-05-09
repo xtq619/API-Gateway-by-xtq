@@ -145,6 +145,10 @@ cd /opt/api-gateway
 git pull origin main
 docker compose -f docker-compose.prod.yml up -d --build
 
+# 查看用户每日推文的情况
+docker compose -f /opt/api-gateway/docker-compose.prod.yml exec postgres psql -U gateway api_gateway -c "SELECT user_id, is_enabled, email, send_time, last_sent_date FROM user_digest_prefs ORDER BY created_at DESC;"
+
+
 # 运行数据库迁移
 docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade head
 ```

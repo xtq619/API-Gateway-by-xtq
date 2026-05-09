@@ -19,4 +19,5 @@ class AiNews(Base):
     source_name: Mapped[str] = mapped_column(String(100), nullable=False, default="官方")
     source_url: Mapped[str] = mapped_column(String(1000), nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

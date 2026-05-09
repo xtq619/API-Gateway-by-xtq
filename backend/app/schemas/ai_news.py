@@ -22,6 +22,7 @@ class NewsUpdate(BaseModel):
     source_name: str | None = None
     source_url: str | None = None
     is_published: bool | None = None
+    is_sensitive: bool | None = None
 
 
 class NewsResponse(BaseModel):
@@ -35,9 +36,14 @@ class NewsResponse(BaseModel):
     source_name: str
     source_url: str | None = None
     is_published: bool
+    is_sensitive: bool = False
     created_at: datetime
 
 
 class NewsList(BaseModel):
     items: list[NewsResponse]
     total: int
+
+
+class SendNewsRequest(BaseModel):
+    user_id: str
