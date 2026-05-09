@@ -2,6 +2,10 @@ import logging
 import re
 import asyncio
 from datetime import datetime, timezone
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.message import EmailMessage
 import smtplib
 
@@ -41,7 +45,6 @@ async def send_digest_email(
         with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
             server.login(smtp_user, smtp_password)
             server.send_message(msg)
-            # send_message 会自动调用 quit，with 语句确保连接关闭
             return True
 
     try:
@@ -60,6 +63,78 @@ async def send_digest_email(
         return False
     except Exception as e:
         logger.error("Failed to send digest email: %s", e)
+        return False
+
+
+async def send_encrypted_email(
+    encrypted_text: str,
+    smtp_host: str,
+    smtp_port: int,
+    smtp_user: str,
+    smtp_password: str,
+    smtp_sender: str,
+    recipients: list[str],
+) -> bool:
+    """Send encrypted content as a .txt attachment. Email body reveals nothing about the article."""
+    if not smtp_user or not smtp_password or not recipients:
+        return False
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    msg = MIMEMultipart()
+    msg["Subject"] = f"加密文件 — {today}"
+    msg["From"] = smtp_sender or smtp_user
+    msg["To"] = ", ".join(recipients)
+
+    body_text = (
+        "这是一封包含加密内容的邮件。\n\n"
+        "请使用解密工具查看原文：https://xtq619.xyz/decrypt.html\n"
+        "（也可将解密工具下载到本地，离线使用）\n\n"
+        "解密步骤：\n"
+        "1. 打开解密工具\n"
+        "2. 将附件中的密文内容粘贴到输入框\n"
+        "3. 输入解密密码\n"
+        "4. 点击解密"
+    )
+    body_html = (
+        '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.8">'
+        "<p>这是一封包含加密内容的邮件。</p>"
+        '<p>请使用解密工具查看原文：<a href="https://xtq619.xyz/decrypt.html">https://xtq619.xyz/decrypt.html</a></p>'
+        '<p style="color:#888;font-size:13px">也可将解密工具下载到本地，离线使用</p>'
+        "<hr style='border:none;border-top:1px solid #eee;margin:20px 0'>"
+        "<p><strong>解密步骤：</strong></p>"
+        "<ol>"
+        "<li>打开解密工具</li>"
+        "<li>将附件中的密文内容粘贴到输入框</li>"
+        "<li>输入解密密码</li>"
+        "<li>点击解密</li>"
+        "</ol>"
+        "</div>"
+    )
+
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+    # Attach encrypted text as .txt file
+    attachment = MIMEBase("text", "plain")
+    attachment.set_payload(encrypted_text.encode("utf-8"))
+    encoders.encode_base64(attachment)
+    attachment.add_header("Content-Disposition", "attachment", filename="encrypted.txt")
+    msg.attach(attachment)
+
+    def _send_sync():
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+            return True
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _send_sync)
+        logger.info("Encrypted email sent to %s", recipients)
+        return result
+    except Exception as e:
+        logger.error("Failed to send encrypted email: %s", e)
         return False
 
 

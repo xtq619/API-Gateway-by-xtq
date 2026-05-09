@@ -186,7 +186,7 @@ async def send_news_to_user(
 ):
     """将指定文章通过邮件发送给指定用户"""
     from app.models.digest import DigestSetting
-    from app.services.notifier import send_digest_email
+    from app.services.notifier import send_digest_email, send_encrypted_email
 
     # Get article
     article = await ai_news_service.get_by_id(db, uuid.UUID(news_id))
@@ -206,16 +206,20 @@ async def send_news_to_user(
     if not setting or not setting.smtp_user or not setting.smtp_password:
         raise HTTPException(status_code=400, detail="请先配置 SMTP 邮箱信息")
 
-    # Compose email content
+    # Send email
     if req.encrypted:
-        digest_markdown = (
-            f"# {article.title}\n\n"
-            f"**来源**：{article.source_name}\n\n"
-            f"此邮件包含加密内容，请使用解密工具查看。\n\n"
-            f"解密工具：https://xtq619.xyz/decrypt.html\n\n"
-            f"```\n{req.encrypted}\n```"
+        # Encrypted: send as .txt attachment, body reveals nothing
+        success = await send_encrypted_email(
+            encrypted_text=req.encrypted,
+            smtp_host=setting.smtp_host,
+            smtp_port=setting.smtp_port,
+            smtp_user=setting.smtp_user,
+            smtp_password=setting.smtp_password,
+            smtp_sender=setting.smtp_sender or setting.smtp_user,
+            recipients=[recipient.email],
         )
     else:
+        # Normal: send full article content
         link = f"\n\n[原文链接]({article.source_url})" if article.source_url else ""
         content = article.content or article.summary or ""
         digest_markdown = (
@@ -224,17 +228,16 @@ async def send_news_to_user(
             f"{content}"
             f"{link}"
         )
-
-    success = await send_digest_email(
-        digest_markdown=digest_markdown,
-        smtp_host=setting.smtp_host,
-        smtp_port=setting.smtp_port,
-        smtp_user=setting.smtp_user,
-        smtp_password=setting.smtp_password,
-        smtp_sender=setting.smtp_sender or setting.smtp_user,
-        recipients=[recipient.email],
-        subject_prefix=f"[{article.source_name}] ",
-    )
+        success = await send_digest_email(
+            digest_markdown=digest_markdown,
+            smtp_host=setting.smtp_host,
+            smtp_port=setting.smtp_port,
+            smtp_user=setting.smtp_user,
+            smtp_password=setting.smtp_password,
+            smtp_sender=setting.smtp_sender or setting.smtp_user,
+            recipients=[recipient.email],
+            subject_prefix=f"[{article.source_name}] ",
+        )
 
     if success:
         return {"message": f"已发送到 {recipient.email}"}
