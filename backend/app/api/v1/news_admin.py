@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, async_session
 from app.core.dependencies import require_admin
 from app.models.user import User
-from app.schemas.ai_news import NewsCreate, NewsList, NewsResponse, NewsUpdate, SendNewsRequest
+from app.schemas.ai_news import NewsCreate, NewsList, NewsResponse, NewsUpdate, SendNewsRequest, EncryptNewsRequest
 from app.services import ai_news_service
 from app.services import news_setting_service
 from app.services.news_fetcher import RSS_SOURCES
@@ -231,3 +231,23 @@ async def send_news_to_user(
         return {"message": f"已发送到 {recipient.email}"}
     else:
         raise HTTPException(status_code=500, detail="发送失败，请检查 SMTP 配置")
+
+
+@router.post("/{news_id}/encrypt")
+async def encrypt_news(
+    news_id: str,
+    req: EncryptNewsRequest,
+    user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """用密码 AES 加密文章内容，返回密文（base64）"""
+    from app.services.crypto import aes_gcm_encrypt
+
+    article = await ai_news_service.get_by_id(db, uuid.UUID(news_id))
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+
+    content = article.content or article.summary or ""
+    plaintext = f"标题：{article.title}\n来源：{article.source_name}\n\n{content}"
+    encrypted = aes_gcm_encrypt(plaintext, req.password)
+    return {"encrypted": encrypted}

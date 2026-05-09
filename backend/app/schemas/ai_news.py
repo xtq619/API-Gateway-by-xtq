@@ -47,3 +47,7 @@ class NewsList(BaseModel):
 
 class SendNewsRequest(BaseModel):
     user_id: str
+
+
+class EncryptNewsRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)

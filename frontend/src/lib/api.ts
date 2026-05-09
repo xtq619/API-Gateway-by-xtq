@@ -85,6 +85,8 @@ export const api = {
   autoFetchNews: () => request('/admin/news/auto-fetch', { method: 'POST' }),
   adminSendNewsToUser: (newsId: string, userId: string) =>
     request(`/admin/news/${newsId}/send`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  adminEncryptNews: (newsId: string, password: string) =>
+    request(`/admin/news/${newsId}/encrypt`, { method: 'POST', body: JSON.stringify({ password }) }),
   listRssSources: () => request('/admin/news/auto-fetch/sources'),
   getNewsSettings: () => request('/admin/news/settings'),
   updateNewsSettings: (data: { fetch_count?: number; fetch_hour?: number; fetch_minute?: number }) =>

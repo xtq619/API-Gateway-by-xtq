@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Trash2, Edit2, Plus, RefreshCw, Save, Send, Settings, Mail } from 'lucide-react';
+import { Trash2, Edit2, Plus, RefreshCw, Save, Send, Settings, Mail, Lock } from 'lucide-react';
 
 export default function Admin() {
   const [users, setUsers] = useState<any[]>([]);
@@ -101,6 +101,10 @@ export default function Admin() {
   const [sendTarget, setSendTarget] = useState<string | null>(null);
   const [sendUserId, setSendUserId] = useState('');
   const [sending, setSending] = useState(false);
+  const [encryptTarget, setEncryptTarget] = useState<string | null>(null);
+  const [encryptPassword, setEncryptPassword] = useState('');
+  const [encrypting, setEncrypting] = useState(false);
+  const [encryptedText, setEncryptedText] = useState<string | null>(null);
   const [newsSettings, setNewsSettings] = useState({ fetch_count: 10, fetch_hour: 8, fetch_minute: 0 });
   const [savingNewsSettings, setSavingNewsSettings] = useState(false);
   const [newsForm, setNewsForm] = useState({
@@ -214,6 +218,26 @@ export default function Admin() {
       setError('发送失败');
     }
     setSending(false);
+  };
+
+  const handleEncrypt = async () => {
+    if (!encryptTarget || !encryptPassword) return;
+    setEncrypting(true);
+    setError(null);
+    setEncryptedText(null);
+    try {
+      const res = await api.adminEncryptNews(encryptTarget, encryptPassword);
+      const data = await res.json();
+      if (res.ok) {
+        setEncryptedText(data.encrypted);
+        navigator.clipboard.writeText(data.encrypted).catch(() => {});
+      } else {
+        setError(data.detail?.message || data.detail || '加密失败');
+      }
+    } catch {
+      setError('加密失败');
+    }
+    setEncrypting(false);
   };
 
   const loadNewsSettings = async () => {
@@ -613,6 +637,7 @@ export default function Admin() {
                     <td className="p-3 text-[var(--color-text-dim)] text-[11px] font-mono">{new Date(item.created_at).toLocaleDateString('zh-CN')}</td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
+                        <button onClick={() => { setEncryptTarget(item.id); setEncryptPassword(''); setEncryptedText(null); }} className="text-[var(--color-text-dim)] hover:text-amber-400 transition-colors" title="加密文章"><Lock size={13} /></button>
                         <button onClick={() => { setSendTarget(item.id); setSendUserId(''); }} className="text-[var(--color-text-dim)] hover:text-[var(--color-accent)] transition-colors" title="发送邮件"><Mail size={13} /></button>
                         <button onClick={() => handleEditNews(item.id)} className="text-[var(--color-text-dim)] hover:text-[var(--color-text)] transition-colors"><Edit2 size={13} /></button>
                         <button onClick={() => handleDeleteNews(item.id)} className="text-[var(--color-text-dim)] hover:text-[var(--color-danger)] transition-colors"><Trash2 size={13} /></button>
@@ -642,6 +667,39 @@ export default function Admin() {
             </button>
             <button onClick={() => setSendTarget(null)} className={btnClass}>取消</button>
           </div>
+        </div>
+      )}
+
+      {tab === 'news' && encryptTarget && (
+        <div className="glass-card p-4 mt-4">
+          <h4 className="font-mono text-[12px] text-[var(--color-text)] tracking-wider mb-3">加密文章内容</h4>
+          <p className="text-[11px] text-[var(--color-text-muted)] font-mono mb-3">用密码 AES 加密文章，生成密文供离线解密查看</p>
+          <div className="flex items-center gap-3 mb-3">
+            <input type="password" value={encryptPassword} onChange={e => setEncryptPassword(e.target.value)}
+              className={inputClass + ' max-w-xs'} placeholder="输入加密密码" />
+            <button onClick={handleEncrypt} disabled={encrypting || !encryptPassword}
+              className="px-4 py-2 text-[11px] font-mono tracking-wider bg-amber-400 text-black border border-amber-400 transition-opacity hover:opacity-85 disabled:opacity-30 cursor-pointer">
+              {encrypting ? '加密中...' : '生成密文'}
+            </button>
+            <button onClick={() => { setEncryptTarget(null); setEncryptedText(null); setEncryptPassword(''); }} className={btnClass}>取消</button>
+          </div>
+          {encryptedText && (
+            <div className="mt-3">
+              <label className="block font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider mb-1.5">密文（已复制到剪贴板）</label>
+              <textarea readOnly value={encryptedText} className={inputClass + ' text-[11px]'} rows={4}
+                onClick={e => (e.target as HTMLTextAreaElement).select()} />
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => { navigator.clipboard.writeText(encryptedText); setSuccess('密文已复制'); setTimeout(() => setSuccess(null), 1500); }}
+                  className="px-3 py-1.5 text-[10px] font-mono tracking-wider border border-[rgba(255,255,255,0.15)] text-[var(--color-text-muted)] transition-all hover:bg-white hover:text-black cursor-pointer">
+                  复制密文
+                </button>
+                <a href="/decrypt.html" target="_blank"
+                  className="px-3 py-1.5 text-[10px] font-mono tracking-wider border border-amber-400/30 text-amber-400 transition-all hover:bg-amber-400/10 cursor-pointer no-underline">
+                  打开解密工具
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
