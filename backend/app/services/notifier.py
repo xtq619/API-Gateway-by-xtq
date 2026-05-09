@@ -74,17 +74,15 @@ async def send_encrypted_email(
     smtp_password: str,
     smtp_sender: str,
     recipients: list[str],
-    source_name: str = "",
 ) -> bool:
     """Send encrypted content as a .txt attachment, disguised as a normal news digest."""
     if not smtp_user or not smtp_password or not recipients:
         return False
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    prefix = f"[{source_name}] " if source_name else ""
 
     msg = MIMEMultipart()
-    msg["Subject"] = f"{prefix}AI 日报 — {today}"
+    msg["Subject"] = f"AI 日报 — {today}"
     msg["From"] = smtp_sender or smtp_user
     msg["To"] = ", ".join(recipients)
 

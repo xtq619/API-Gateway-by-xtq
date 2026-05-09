@@ -217,7 +217,6 @@ async def send_news_to_user(
             smtp_password=setting.smtp_password,
             smtp_sender=setting.smtp_sender or setting.smtp_user,
             recipients=[recipient.email],
-            source_name=article.source_name,
         )
     else:
         # Normal: send full article content
