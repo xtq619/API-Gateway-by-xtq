@@ -732,7 +732,6 @@ export default function Admin() {
                   {encryptSending ? '发送中...' : '发送密文邮件'}
                 </button>
               </div>
-              </div>
             </div>
           )}
         </div>
