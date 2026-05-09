@@ -43,6 +43,9 @@ RSS_SOURCES = [
 HTTP_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
+# Silicon Valley proxy for fetching foreign news sources
+SILICON_VALLEY_PROXY = "https://ai.xtq619.xyz"
+
 # Max concurrent LLM calls
 LLM_CONCURRENCY = 10
 
@@ -277,6 +280,43 @@ async def _process_one_entry(
     )
 
 
+async def fetch_from_proxy(per_source: int = 5) -> list[dict]:
+    """Fetch articles from Silicon Valley proxy (ai.xtq619.xyz).
+
+    Returns list of entry dicts compatible with local RSS entries.
+    Proxy articles already have fulltext, so fetch_article_fulltext will be skipped.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0), follow_redirects=True) as client:
+            resp = await client.post(
+                f"{SILICON_VALLEY_PROXY}/fetch_batch",
+                json={"per_source": per_source},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("Silicon Valley proxy fetch failed: %s", e)
+        return []
+
+    entries = []
+    for article in data.get("articles", []):
+        title = article.get("title", "")
+        link = article.get("link", "")
+        if not title or not link:
+            continue
+        entries.append({
+            "title": title,
+            "link": link,
+            "summary_raw": article.get("summary", ""),
+            "content_raw": article.get("fulltext", ""),
+            "source_name": article.get("source_name", "海外"),
+            "default_category": article.get("category", "军事"),
+        })
+
+    logger.info("Silicon Valley proxy returned %d articles", len(entries))
+    return entries
+
+
 async def auto_fetch_news(db: AsyncSession, total_count: int = 10) -> dict:
     """Main pipeline: fetch RSS (parallel) → batch dedup → AI summarize (concurrent) → save.
 
@@ -304,8 +344,9 @@ async def _auto_fetch_news_impl(db: AsyncSession, total_count: int) -> dict:
     # Even distribution: each source gets ceil(total_count / num_sources)
     per_source = math.ceil(total_count / len(RSS_SOURCES))
 
-    # Step 1: Fetch all RSS feeds in parallel (each with 10s timeout)
+    # Step 1: Fetch local RSS feeds + Silicon Valley proxy in parallel
     rss_tasks = [fetch_rss_entries(source, max_items=per_source) for source in RSS_SOURCES]
+    rss_tasks.append(fetch_from_proxy(per_source=per_source))
     results = await asyncio.gather(*rss_tasks)
 
     all_entries = []
