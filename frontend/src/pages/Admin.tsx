@@ -105,6 +105,8 @@ export default function Admin() {
   const [encryptPassword, setEncryptPassword] = useState('');
   const [encrypting, setEncrypting] = useState(false);
   const [encryptedText, setEncryptedText] = useState<string | null>(null);
+  const [encryptSendUserId, setEncryptSendUserId] = useState('');
+  const [encryptSending, setEncryptSending] = useState(false);
   const [newsSettings, setNewsSettings] = useState({ fetch_count: 10, fetch_hour: 8, fetch_minute: 0 });
   const [savingNewsSettings, setSavingNewsSettings] = useState(false);
   const [newsForm, setNewsForm] = useState({
@@ -238,6 +240,25 @@ export default function Admin() {
       setError('加密失败');
     }
     setEncrypting(false);
+  };
+
+  const handleSendEncrypted = async () => {
+    if (!encryptTarget || !encryptedText || !encryptSendUserId) return;
+    setEncryptSending(true);
+    setError(null);
+    try {
+      const res = await api.adminSendNewsToUser(encryptTarget, encryptSendUserId, encryptedText);
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(data.message || '已发送');
+        setEncryptSendUserId('');
+      } else {
+        setError(data.detail?.message || data.detail || '发送失败');
+      }
+    } catch {
+      setError('发送失败');
+    }
+    setEncryptSending(false);
   };
 
   const loadNewsSettings = async () => {
@@ -681,7 +702,7 @@ export default function Admin() {
               className="px-4 py-2 text-[11px] font-mono tracking-wider bg-amber-400 text-black border border-amber-400 transition-opacity hover:opacity-85 disabled:opacity-30 cursor-pointer">
               {encrypting ? '加密中...' : '生成密文'}
             </button>
-            <button onClick={() => { setEncryptTarget(null); setEncryptedText(null); setEncryptPassword(''); }} className={btnClass}>取消</button>
+            <button onClick={() => { setEncryptTarget(null); setEncryptedText(null); setEncryptPassword(''); setEncryptSendUserId(''); }} className={btnClass}>取消</button>
           </div>
           {encryptedText && (
             <div className="mt-3">
@@ -697,6 +718,20 @@ export default function Admin() {
                   className="px-3 py-1.5 text-[10px] font-mono tracking-wider border border-amber-400/30 text-amber-400 transition-all hover:bg-amber-400/10 cursor-pointer no-underline">
                   打开解密工具
                 </a>
+              </div>
+              <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[var(--color-border)]">
+                <label className="font-mono text-[10px] text-[var(--color-text-muted)] tracking-wider shrink-0">发送到：</label>
+                <select value={encryptSendUserId} onChange={e => setEncryptSendUserId(e.target.value)} className={inputClass + ' max-w-xs'}>
+                  <option value="">选择用户...</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                  ))}
+                </select>
+                <button onClick={handleSendEncrypted} disabled={encryptSending || !encryptSendUserId}
+                  className="px-4 py-2 text-[11px] font-mono tracking-wider bg-amber-400 text-black border border-amber-400 transition-opacity hover:opacity-85 disabled:opacity-30 cursor-pointer">
+                  {encryptSending ? '发送中...' : '发送密文邮件'}
+                </button>
+              </div>
               </div>
             </div>
           )}

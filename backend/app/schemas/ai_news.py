@@ -47,6 +47,7 @@ class NewsList(BaseModel):
 
 class SendNewsRequest(BaseModel):
     user_id: str
+    encrypted: str | None = None
 
 
 class EncryptNewsRequest(BaseModel):

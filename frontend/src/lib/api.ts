@@ -83,8 +83,8 @@ export const api = {
   adminDeleteNews: (id: string) =>
     request(`/admin/news/${id}`, { method: 'DELETE' }),
   autoFetchNews: () => request('/admin/news/auto-fetch', { method: 'POST' }),
-  adminSendNewsToUser: (newsId: string, userId: string) =>
-    request(`/admin/news/${newsId}/send`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  adminSendNewsToUser: (newsId: string, userId: string, encrypted?: string) =>
+    request(`/admin/news/${newsId}/send`, { method: 'POST', body: JSON.stringify({ user_id: userId, ...(encrypted ? { encrypted } : {}) }) }),
   adminEncryptNews: (newsId: string, password: string) =>
     request(`/admin/news/${newsId}/encrypt`, { method: 'POST', body: JSON.stringify({ password }) }),
   listRssSources: () => request('/admin/news/auto-fetch/sources'),

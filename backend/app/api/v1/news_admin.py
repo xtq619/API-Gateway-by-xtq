@@ -207,14 +207,23 @@ async def send_news_to_user(
         raise HTTPException(status_code=400, detail="请先配置 SMTP 邮箱信息")
 
     # Compose email content
-    link = f"\n\n[原文链接]({article.source_url})" if article.source_url else ""
-    content = article.content or article.summary or ""
-    digest_markdown = (
-        f"# {article.title}\n\n"
-        f"**来源**：{article.source_name}\n\n"
-        f"{content}"
-        f"{link}"
-    )
+    if req.encrypted:
+        digest_markdown = (
+            f"# {article.title}\n\n"
+            f"**来源**：{article.source_name}\n\n"
+            f"此邮件包含加密内容，请使用解密工具查看。\n\n"
+            f"解密工具：https://xtq619.xyz/decrypt.html\n\n"
+            f"```\n{req.encrypted}\n```"
+        )
+    else:
+        link = f"\n\n[原文链接]({article.source_url})" if article.source_url else ""
+        content = article.content or article.summary or ""
+        digest_markdown = (
+            f"# {article.title}\n\n"
+            f"**来源**：{article.source_name}\n\n"
+            f"{content}"
+            f"{link}"
+        )
 
     success = await send_digest_email(
         digest_markdown=digest_markdown,
