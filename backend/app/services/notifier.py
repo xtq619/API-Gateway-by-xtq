@@ -1,7 +1,9 @@
 import logging
 import re
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+_BJ = timezone(timedelta(hours=8))
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -31,11 +33,11 @@ async def send_digest_email(
         logger.error("No SMTP recipients configured")
         return False
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(_BJ).strftime("%Y-%m-%d")
     html_body = _markdown_to_email_html(digest_markdown, today)
 
     msg = EmailMessage()
-    msg["Subject"] = f"{subject_prefix}AI 日报 — {today}"
+    msg["Subject"] = f"{subject_prefix}今日速递 — {today}"
     msg["From"] = smtp_sender or smtp_user
     msg["To"] = ", ".join(recipients)
     msg.set_content(digest_markdown)
@@ -79,10 +81,10 @@ async def send_encrypted_email(
     if not smtp_user or not smtp_password or not recipients:
         return False
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(_BJ).strftime("%Y-%m-%d")
 
     msg = MIMEMultipart()
-    msg["Subject"] = f"AI 日报 — {today}"
+    msg["Subject"] = f"今日速递 — {today}"
     msg["From"] = smtp_sender or smtp_user
     msg["To"] = ", ".join(recipients)
 
@@ -94,7 +96,7 @@ async def send_encrypted_email(
         '<div style="font-family:-apple-system,Segoe UI,sans-serif;'
         'max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.8">'
         '<div style="border-bottom:2px solid #4f46e5;padding-bottom:12px;margin-bottom:20px">'
-        '<h1 style="color:#4f46e5;margin:0;font-size:20px">AI 日报</h1>'
+        '<h1 style="color:#4f46e5;margin:0;font-size:20px">今日速递</h1>'
         f'<span style="color:#888;font-size:13px">{today}</span>'
         "</div>"
         "<p>今日资讯已整理完毕，请查收附件原文。</p>"
@@ -147,7 +149,7 @@ def _markdown_to_email_html(markdown: str, date: str) -> str:
              max-width: 680px; margin: 0 auto; padding: 20px;
              color: #333; line-height: 1.6;">
   <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 20px;">
-    <h1 style="color: #4f46e5; margin: 0;">AI 日报</h1>
+    <h1 style="color: #4f46e5; margin: 0;">今日速递</h1>
     <span style="color: #888;">{date}</span>
   </div>
   {body}
