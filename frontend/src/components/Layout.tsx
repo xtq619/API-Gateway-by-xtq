@@ -180,7 +180,7 @@ export default function Layout() {
       </aside>
 
       {/* 主内容区 */}
-      <main className={`flex-1 ${mainMl} transition-all duration-300`}>
+      <main className={`flex-1 ${mainMl} transition-all duration-300 overflow-x-hidden min-w-0`}>
         {/* 顶部栏：移动端汉堡按钮 + 桌面端收起按钮 */}
         <div className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.04)]" style={{ background: 'rgba(6,6,6,0.8)', backdropFilter: 'blur(12px)' }}>
           {isMobile ? (

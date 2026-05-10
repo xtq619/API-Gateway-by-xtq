@@ -52,7 +52,7 @@ export default function AiNews() {
   const groups = groupByDate(items);
 
   return (
-    <div>
+    <div className="w-full max-w-full overflow-x-hidden">
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <Newspaper size={22} className="text-[var(--color-accent)]" />
