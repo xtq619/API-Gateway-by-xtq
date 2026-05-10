@@ -141,27 +141,37 @@ async def get_first_enabled_model(db: AsyncSession) -> ModelRegistry | None:
     return None
 
 
+def _strip_html(html: str) -> str:
+    """Strip HTML tags from text."""
+    if not html:
+        return ""
+    clean = re.sub(r'<[^>]+>', '', html)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
+
+
 def _build_prompt(title: str, content: str, default_category: str) -> str:
-    content_snippet = content[:3000] if content else ""
-    return f"""你是一个军事新闻编辑。请阅读以下英文军事文章，完成两个任务：
+    content_snippet = content[:8000] if content else ""
+    return f"""你是一个军事新闻编辑。请阅读以下英文军事文章，完成三个任务：
 
-任务1 - 翻译：将原文完整翻译为中文（保留所有人名、地名、装备型号、数据）
-任务2 - 摘要：用 80-120 字生成中文摘要
+任务1 - 中文标题：将英文标题翻译为简洁的中文标题（不超过40字）
+任务2 - 全文翻译：将原文完整翻译为中文，保留所有人名、地名、装备型号、数据，不要遗漏任何段落
+任务3 - 摘要：用 80-120 字生成中文摘要
 
-标题：{title}
+英文标题：{title}
 
 原文：
 {content_snippet}
 
 请严格按以下 JSON 格式返回，不要包含任何其他内容，不要展示思考过程：
-{{"summary": "80-120字中文摘要", "translated": "中文翻译全文", "category": "军事"}}"""
+{{"cn_title": "中文标题", "summary": "80-120字中文摘要", "translated": "中文翻译全文", "category": "军事"}}"""
 
 
 async def summarize_with_ai(
     title: str, content: str, model: ModelRegistry, default_category: str,
     client: httpx.AsyncClient,
-) -> tuple[str, str, str]:
-    """Call LLM to translate and summarize an article. Returns (summary, category, translated)."""
+) -> tuple[str, str, str, str]:
+    """Call LLM to translate and summarize an article. Returns (cn_title, summary, category, translated)."""
     prompt = _build_prompt(title, content, default_category)
     api_key = decrypt_api_key(model.api_key_encrypted)
 
@@ -203,31 +213,32 @@ async def summarize_with_ai(
                 content_text = content_text[start:end + 1]
 
         parsed = json.loads(content_text)
+        cn_title = parsed.get("cn_title", "")
         summary = parsed.get("summary", title)
         category = parsed.get("category", default_category)
         translated = parsed.get("translated", "")
         if category not in ("新闻", "论文", "工具", "军事", "其他"):
             category = default_category
-        return summary, category, translated
+        return cn_title, summary, category, translated
 
     except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
         # Structured errors: JSON parse failure, missing keys, empty response
         raw = locals().get("content_text", "")
         logger.warning("AI summarization parse error for '%s': [%s] %s\nraw: %s", title[:50], type(e).__name__, repr(e), raw[-300:])
         fallback = content[:100] if content else title
-        return fallback, default_category, ""
+        return "", fallback, default_category, ""
     except httpx.TimeoutException as e:
         logger.warning("AI summarization timeout for '%s': %s", title[:50], e or "(no detail)")
         fallback = content[:100] if content else title
-        return fallback, default_category, ""
+        return "", fallback, default_category, ""
     except httpx.HTTPError as e:
         logger.warning("AI summarization HTTP error for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
         fallback = content[:100] if content else title
-        return fallback, default_category, ""
+        return "", fallback, default_category, ""
     except Exception as e:
         logger.warning("AI summarization failed for '%s': [%s] %s", title[:50], type(e).__name__, repr(e))
         fallback = content[:100] if content else title
-        return fallback, default_category, ""
+        return "", fallback, default_category, ""
 
 
 async def batch_get_duplicates(db: AsyncSession, links: list[str]) -> set[str]:
@@ -255,12 +266,12 @@ async def _process_one_entry(
 
     # Step 1: Fetch full article text from the source URL
     fulltext = await fetch_article_fulltext(entry["link"], client, fetch_sem)
-    content_for_ai = fulltext or entry["content_raw"] or entry["summary_raw"]
+    content_for_ai = fulltext or _strip_html(entry["content_raw"]) or _strip_html(entry["summary_raw"])
 
     # Step 2: AI translate + summarize (retry up to 2 times)
     async with sem:
         for attempt in range(3):
-            summary, category, translated = await summarize_with_ai(
+            cn_title, summary, category, translated = await summarize_with_ai(
                 entry["title"], content_for_ai, model, entry["default_category"], client,
             )
             if translated:
@@ -273,10 +284,13 @@ async def _process_one_entry(
         logger.warning("Translation failed after 3 attempts, skipping: '%s'", entry["title"][:50])
         return None
 
+    # Use Chinese title if available, otherwise fall back to original
+    final_title = cn_title.strip() if cn_title and cn_title.strip() else entry["title"]
+
     return AiNews(
-        title=entry["title"][:300],
+        title=final_title[:300],
         summary=summary,
-        content=translated[:5000],
+        content=translated[:8000],
         category=category,
         source_name=entry["source_name"],
         source_url=entry["link"][:1000],
