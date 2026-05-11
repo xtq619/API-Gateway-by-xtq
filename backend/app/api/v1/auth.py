@@ -54,7 +54,7 @@ async def get_me(user_id: str = Depends(get_current_user_id), db: AsyncSession =
 async def wx_login(req: WxLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     await _check_auth_rate_limit(request)
     try:
-        result = await auth_service.wx_login_user(db, req.code)
+        result = await auth_service.wx_login_user(db, req.code, req.nickname, req.avatar_url)
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

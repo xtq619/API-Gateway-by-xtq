@@ -24,6 +24,8 @@ class LoginRequest(BaseModel):
 
 class WxLoginRequest(BaseModel):
     code: str
+    nickname: str = ""
+    avatar_url: str = ""
 
 
 class WxBindRequest(BaseModel):
@@ -45,4 +47,5 @@ class UserResponse(BaseModel):
     name: str
     role: str
     is_active: bool
+    avatar_url: str | None = None
     created_at: datetime

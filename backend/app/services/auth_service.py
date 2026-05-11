@@ -76,7 +76,7 @@ async def _code2session(code: str) -> dict:
     return {"openid": openid}
 
 
-async def wx_login_user(db: AsyncSession, code: str) -> dict:
+async def wx_login_user(db: AsyncSession, code: str, nickname: str = "", avatar_url: str = "") -> dict:
     """Login or register via WeChat code."""
     session_data = await _code2session(code)
     openid = session_data["openid"]
@@ -91,14 +91,22 @@ async def wx_login_user(db: AsyncSession, code: str) -> dict:
             id=uuid.uuid4(),
             email=f"wx_{openid[:8]}@wx.miniprogram",
             password_hash=hash_password(uuid.uuid4().hex),
-            name=f"微信用户",
+            name=nickname or "微信用户",
             wx_openid=openid,
+            avatar_url=avatar_url or None,
         )
         db.add(user)
         billing = BillingAccount(user_id=user.id, balance=10.0)
         db.add(billing)
         await db.flush()
         await db.refresh(user)
+    else:
+        # Update nickname and avatar if provided
+        if nickname and nickname != user.name:
+            user.name = nickname
+        if avatar_url:
+            user.avatar_url = avatar_url
+        await db.flush()
 
     if not user.is_active:
         raise ValueError("账号已被禁用")
