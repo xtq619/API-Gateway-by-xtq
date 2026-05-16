@@ -2,13 +2,26 @@
 
 ## 服务器信息
 
-- 公网 IP: `47.122.19.239`
+- 公网 IP: `101.133.230.197`
 - 系统: Alibaba Cloud Linux 3
+- SSH 别名: `ssh api-gw`
 - 域名: `xtq619.xyz` (前端) / `api.xtq619.xyz` (API)
-- SSL: Cloudflare Flexible SSL
-- 访问方式: **Cloudflare Tunnel**（绕过阿里云 ICP 备案要求）
+- SSL: Cloudflare Proxied
 - 数据库: PostgreSQL 15 (Docker)
 - 缓存: Redis 7 (Docker)
+
+## 目录结构
+
+服务器上只维护一个仓库 `newcreat`，通过软链接让 Docker 从 `/opt/api-gateway` 启动：
+
+```
+/opt/newcreat/                  ← Git 仓库（xtq619/newcreat）
+└── api-gateway/                ← 后端 + 前端源码
+
+/opt/api-gateway  →  /opt/newcreat/api-gateway  （软链接）
+```
+
+Docker Compose 从 `/opt/api-gateway` 启动，实际读取的是 `/opt/newcreat/api-gateway` 的文件。数据库 volume 不受目录影响，数据持久化。
 
 ## 首次部署
 
@@ -37,18 +50,23 @@ sudo systemctl restart docker
 ### 2. 拉取代码并部署
 
 ```bash
-# 拉取代码
-git clone https://ghfast.top/https://github.com/xtq619/API-Gateway-by-xtq.git /opt/api-gateway
+# 拉取 newcreat 仓库
+git clone https://ghfast.top/https://github.com/xtq619/newcreat.git /opt/newcreat
+
+# 创建软链接（Docker 从 /opt/api-gateway 启动）
+ln -s /opt/newcreat/api-gateway /opt/api-gateway
 cd /opt/api-gateway
 
 # 创建环境变量
-cat > .env <<EOF
+cat > .env <<'EOF'
 DB_USER=gateway
 DB_PASSWORD=<随机密码>
 DB_NAME=api_gateway
 SECRET_KEY=<随机密钥>
-ENCRYPTION_KEY=<Fernet密钥>
-DOMAIN=xtq619.xyz
+ENCRYPTION_KEY=<Fernet密钥，用 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 生成>
+DOMAIN=<你的域名，如 example.com>
+WX_APPID=<微信小程序 AppID，不需要可留空>
+WX_SECRET=<微信小程序 Secret，不需要可留空>
 EOF
 
 # 构建并启动
@@ -153,8 +171,9 @@ docker compose -f docker-compose.prod.yml logs -f nginx
 ### 更新代码
 
 ```bash
-cd /opt/api-gateway
-git pull
+cd /opt/newcreat
+git pull origin main
+cd api-gateway
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
@@ -209,6 +228,51 @@ docker system prune -a --volumes
 | 邮箱 | admin@xtq619.xyz |
 | 密码 | admin123 |
 
+## 新机部署注意事项
+
+以下文件中**硬编码了域名**，换域名时必须逐一修改：
+
+| 文件 | 硬编码内容 | 说明 |
+|------|-----------|------|
+| `miniprogram/app.js` | `baseUrl: 'https://api.xtq619.xyz/api/v1'` | 小程序 API 地址 |
+| `nginx/nginx.conf` | `server_name api.xtq619.xyz` / `server_name xtq619.xyz` | Nginx 路由 |
+| `backend/app/services/news_fetcher.py` | `SILICON_VALLEY_PROXY = "https://ai.xtq619.xyz` | 海外新闻代理地址 |
+| `docker-compose.prod.yml` | `DOMAIN` 环境变量（用于 CORS） | .env 文件控制 |
+
+### .env 完整变量清单
+
+| 变量 | 必需 | 说明 |
+|------|------|------|
+| `DB_USER` | 是 | PostgreSQL 用户名 |
+| `DB_PASSWORD` | 是 | PostgreSQL 密码 |
+| `DB_NAME` | 是 | 数据库名（默认 `api_gateway`） |
+| `SECRET_KEY` | 是 | JWT 签名密钥（随机长字符串） |
+| `ENCRYPTION_KEY` | 是 | Fernet 密钥，加密存储上游 API Key |
+| `DOMAIN` | 是 | 域名，用于 CORS（如 `example.com`） |
+| `WX_APPID` | 否 | 微信小程序 AppID（不需要微信登录可留空） |
+| `WX_SECRET` | 否 | 微信小程序 Secret |
+
+### 腾讯云硅谷新闻代理（可选）
+
+如果需要海外 RSS 抓取功能，需要在腾讯云硅谷服务器部署新闻代理：
+
+```bash
+ssh tencent
+
+# 创建代理服务（Flask，监听 5001 端口）
+# 文件：/root/news_fetcher.py
+# 功能：接收批量 RSS URL → 抓取 → 返回文章内容
+
+# Nginx 配置（/etc/nginx/conf.d/ai.conf）
+# ai.xtq619.xyz:443 → 127.0.0.1:5001
+
+# 启动
+nohup python3 /root/news_fetcher.py > /root/news_fetcher.log 2>&1 &
+systemctl reload nginx
+```
+
+如果不需要海外代理，可以在 `news_fetcher.py` 中将 `SILICON_VALLEY_PROXY` 设为空字符串，RSS 源将直接从后端服务器抓取（部分境外源可能超时）。
+
 ## 服务器迁移（换新服务器）
 
 当旧服务器快过期时，按以下步骤迁移到新服务器。
@@ -234,6 +298,8 @@ scp root@旧IP:/tmp/api_gateway_backup.sql D:\server-backup\
 # 下载 .env（保留密钥和配置）
 scp root@旧IP:/opt/api-gateway/.env D:\server-backup\
 ```
+
+> **注意**：`/opt/api-gateway` 是软链接指向 `/opt/newcreat/api-gateway`，下载 `.env` 即可。
 
 ### 2. 新服务器准备
 
@@ -270,8 +336,11 @@ sudo systemctl restart docker
 ### 4. 部署项目
 
 ```bash
-# 拉取代码
-git clone https://ghfast.top/https://github.com/xtq619/API-Gateway-by-xtq.git /opt/api-gateway
+# 拉取 newcreat 仓库
+git clone https://ghfast.top/https://github.com/xtq619/newcreat.git /opt/newcreat
+
+# 创建软链接
+ln -s /opt/newcreat/api-gateway /opt/api-gateway
 cd /opt/api-gateway
 
 # 上传旧的 .env 到新服务器（在本地 PowerShell 执行）

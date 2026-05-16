@@ -17,6 +17,7 @@ class ModelRegistry(Base):
     base_url: Mapped[str] = mapped_column(String(500), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    is_reasoning: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     pricing_input: Mapped[float] = mapped_column(Numeric(10, 6), default=0)
     pricing_output: Mapped[float] = mapped_column(Numeric(10, 6), default=0)
     max_tokens_limit: Mapped[int] = mapped_column(Integer, default=4096)

@@ -18,7 +18,7 @@
 ```text
 api-gateway/
 ├── backend/
-│   ├── alembic/              # 数据库迁移（共 10 个）
+│   ├── alembic/              # 数据库迁移（共 15 个）
 │   ├── app/
 │   │   ├── core/
 │   │   │   ├── config.py     # 配置（数据库、Redis、JWT、微信）
@@ -37,8 +37,9 @@ api-gateway/
 │   │   │   ├── news_setting.py   # 资讯抓取配置
 │   │   │   ├── battle.py         # 擂台对战记录
 │   │   │   ├── digest.py         # SMTP 摘要配置
-│   │   │   └── user_digest.py    # 用户订阅偏好
-│   │   ├── schemas/          # Pydantic 请求/响应模型
+│   │   │   ├── user_digest.py    # 用户订阅偏好
+│   │   │   └── worldcup.py       # 世界杯竞猜 + 情绪投票
+│   │   ├── schemas/          # Pydantic 请求/响应模型（含 worldcup.py）
 │   │   ├── api/
 │   │   │   ├── v1/           # 管理 API（JWT 认证）
 │   │   │   │   ├── auth.py        # 注册/登录/微信登录/微信绑定
@@ -53,7 +54,9 @@ api-gateway/
 │   │   │   │   ├── news_admin.py  # 军事资讯管理 + 抓取设置
 │   │   │   │   ├── digest.py      # 摘要订阅
 │   │   │   │   ├── user_digest.py
-│   │   │   │   └── battle.py      # 擂台 SSE + WebSocket
+│   │   │   │   ├── battle.py      # 擂台 SSE + WebSocket
+│   │   │   │   ├── hub_admin.py
+│   │   │   │   └── worldcup.py    # 世界杯竞猜 + 情绪投票
 │   │   │   └── public/       # 对外 API（OpenAI 兼容 + 公开接口）
 │   │   ├── services/
 │   │   │   ├── proxy_service.py       # 核心代理（SSE 流式 + 计费）
@@ -64,7 +67,8 @@ api-gateway/
 │   │   │   ├── news_fetcher.py        # 军事 RSS 抓取 + AI 摘要（均匀分配）
 │   │   │   ├── news_setting_service.py # 资讯抓取配置读写
 │   │   │   ├── digest.py              # 每日摘要编译
-│   │   │   └── notifier.py            # SMTP 邮件发送
+│   │   │   ├── notifier.py            # SMTP 邮件发送
+│   │   │   └── worldcup_service.py    # 世界杯竞猜/情绪服务
 │   │   ├── middleware/
 │   │   └── main.py           # FastAPI 入口 + APScheduler
 │   ├── tests/
@@ -94,6 +98,7 @@ api-gateway/
 - **用量计费**：按 token 实时扣费，预付制，行锁防并发
 - **多模型管理**：OpenAI、Anthropic、Azure、自定义模型
 - **模型擂台**：两个 AI 辩论 + 裁判评判（SSE 流式 / WebSocket）
+- **世界杯**：赛程展示、竞猜预测、情绪投票、赛事分析
 - **军事资讯**：4 个 RSS 源均匀分配抓取 → AI 中文摘要 → 自动发布
 - **资讯设置**：管理员可配置每日抓取数量、推送时间，支持手动触发
 - **每日摘要**：APScheduler 定时 → 编译 → SMTP 邮件推送
@@ -141,16 +146,11 @@ npm run dev
 ### 生产部署
 
 ```bash
-cd /opt/api-gateway
+# /opt/api-gateway 是 /opt/newcreat/api-gateway 的软链接
+cd /opt/newcreat
 git pull origin main
+cd api-gateway
 docker compose -f docker-compose.prod.yml up -d --build
-
-# 查看用户每日推文的情况
-docker compose -f /opt/api-gateway/docker-compose.prod.yml exec postgres psql -U gateway api_gateway -c "SELECT user_id, is_enabled, email, send_time, last_sent_date FROM user_digest_prefs ORDER BY created_at DESC;"
-
-
-# 运行数据库迁移
-docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade head
 ```
 
 ## API 文档
@@ -158,17 +158,19 @@ docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade
 - Swagger: `https://api.xtq619.xyz/docs`
 - 健康检查: `https://api.xtq619.xyz/health`
 
-## 环境变量（backend/.env）
+## 环境变量（.env，由 docker-compose.prod.yml 读取）
 
-| 变量 | 说明 |
-|------|------|
-| DATABASE_URL | PostgreSQL 异步连接 |
-| REDIS_URL | Redis 连接 |
-| SECRET_KEY | JWT 签名密钥 |
-| ENCRYPTION_KEY | Fernet 密钥（加密上游 API Key） |
-| WX_APPID | 微信小程序 AppID |
-| WX_SECRET | 微信小程序 AppSecret |
-| MARKUP_RATIO | API 加价比例（默认 1.5x） |
+| 变量 | 必需 | 说明 |
+|------|------|------|
+| DB_USER | 是 | PostgreSQL 用户名 |
+| DB_PASSWORD | 是 | PostgreSQL 密码 |
+| DB_NAME | 否 | 数据库名（默认 `api_gateway`） |
+| SECRET_KEY | 是 | JWT 签名密钥 |
+| ENCRYPTION_KEY | 是 | Fernet 密钥（加密上游 API Key） |
+| DOMAIN | 是 | 域名（用于 CORS，如 `example.com`） |
+| WX_APPID | 否 | 微信小程序 AppID |
+| WX_SECRET | 否 | 微信小程序 AppSecret |
+| MARKUP_RATIO | 否 | API 加价比例（默认 1.5x） |
 
 ## 数据库迁移记录
 
@@ -184,3 +186,8 @@ docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade
 | cf6a7b8c9d0e | 擂台记录 |
 | d1a2b3c4d5e6 | 微信 openid |
 | e2f3a4b5c6d7 | 资讯抓取配置 |
+| f3a4b5c6d7e8 | 用户摘要 last_sent_date |
+| g4h5i6j7k8l9 | 资讯 is_sensitive 标记 |
+| h5i6j7k8l9m0 | 用户头像 avatar_url |
+| i6j7k8l9m0n1 | Hub 内容管理 |
+| j7k8l9m0n1o2 | 世界杯竞猜 + 情绪投票 |

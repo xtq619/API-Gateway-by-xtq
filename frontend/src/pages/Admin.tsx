@@ -8,7 +8,33 @@ export default function Admin() {
   const [showAddModel, setShowAddModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [tab, setTab] = useState<'users' | 'news' | 'feedback' | 'smtp'>('users');
+  const [tab, setTab] = useState<'users' | 'news' | 'feedback' | 'smtp' | 'hub'>('users');
+
+  // Hub content state
+  const [hubItems, setHubItems] = useState<any[]>([]);
+  const [hubEditing, setHubEditing] = useState<string | null>(null);
+  const [hubEditContent, setHubEditContent] = useState('');
+  const [hubSaving, setHubSaving] = useState(false);
+
+  const loadHubContent = async () => {
+    const res = await api.adminGetHubContent();
+    if (res.ok) setHubItems(await res.json());
+  };
+
+  const saveHubContent = async (key: string) => {
+    setHubSaving(true);
+    setError(null);
+    const res = await api.adminUpdateHubContent(key, { content: hubEditContent });
+    if (res.ok) {
+      setHubEditing(null);
+      loadHubContent();
+      setSuccess('已保存');
+      setTimeout(() => setSuccess(null), 2000);
+    } else {
+      setError('保存失败');
+    }
+    setHubSaving(false);
+  };
 
   // SMTP state
   const [smtp, setSmtp] = useState<any>(null);
@@ -378,6 +404,9 @@ export default function Admin() {
         <button onClick={() => { setTab('smtp'); loadSmtp(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
           tab === 'smtp' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
         }`}>SMTP 配置</button>
+        <button onClick={() => { setTab('hub'); loadHubContent(); }} className={`px-4 py-2 text-[12px] font-mono tracking-wide rounded-lg border transition-all ${
+          tab === 'hub' ? 'border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]' : 'border-[rgba(255,255,255,0.08)] text-[var(--color-text-muted)] hover:border-[rgba(255,255,255,0.2)]'
+        }`}>首页内容</button>
       </div>
 
       {tab === 'users' && (<>
@@ -850,6 +879,47 @@ export default function Admin() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'hub' && (
+        <div className="space-y-4">
+          {hubItems.map(item => (
+            <div key={item.key} className="glass-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-mono text-[13px] text-[var(--color-text)] tracking-wider">{item.title || item.key}</h3>
+                  <p className="font-mono text-[10px] text-[var(--color-text-dim)] mt-1">key: {item.key}</p>
+                </div>
+                {hubEditing !== item.key ? (
+                  <button onClick={() => { setHubEditing(item.key); setHubEditContent(item.content); }}
+                    className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-mono tracking-wider border border-[rgba(255,255,255,0.15)] text-[var(--color-text-muted)] transition-all hover:bg-white hover:text-black cursor-pointer">
+                    <Edit2 size={12} /> 编辑
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button onClick={() => saveHubContent(item.key)} disabled={hubSaving}
+                      className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-mono tracking-wider bg-white text-black border border-white transition-opacity hover:opacity-85 cursor-pointer disabled:opacity-40">
+                      <Save size={12} /> {hubSaving ? '保存中...' : '保存'}
+                    </button>
+                    <button onClick={() => setHubEditing(null)}
+                      className="px-3 py-1.5 text-[11px] font-mono tracking-wider border border-[rgba(255,255,255,0.15)] text-[var(--color-text-muted)] transition-all hover:bg-white hover:text-black cursor-pointer">
+                      取消
+                    </button>
+                  </div>
+                )}
+              </div>
+              {hubEditing === item.key ? (
+                <textarea value={hubEditContent} onChange={e => setHubEditContent(e.target.value)}
+                  className={inputClass} rows={6} />
+              ) : (
+                <p className="text-[13px] text-[var(--color-text-muted)] leading-relaxed whitespace-pre-wrap">{item.content}</p>
+              )}
+            </div>
+          ))}
+          {hubItems.length === 0 && (
+            <div className="glass-card p-12 text-center text-[var(--color-text-muted)] font-mono text-[12px]">暂无内容</div>
+          )}
         </div>
       )}
     </div>

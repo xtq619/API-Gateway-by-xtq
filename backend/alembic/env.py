@@ -14,6 +14,12 @@ from app.models.usage_log import UsageLog
 from app.models.billing import BillingAccount, BillingTransaction
 from app.models.feedback import Feedback
 from app.models.ai_news import AiNews
+from app.models.battle import BattleRecord
+from app.models.digest import DigestSetting
+from app.models.user_digest import UserDigestPref
+from app.models.news_setting import NewsSetting
+from app.models.hub_content import HubContent
+from app.models.worldcup import Guess, EmotionVote
 
 config = context.config
 if config.config_file_name is not None:

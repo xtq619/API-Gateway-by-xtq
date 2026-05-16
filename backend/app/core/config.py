@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 1440
+    JWT_EXPIRE_MINUTES: int = 43200
     API_KEY_PREFIX: str = "sk-"
     ENCRYPTION_KEY: str = "change-me-to-a-random-fernet-key-32b"
     DEBUG: bool = True

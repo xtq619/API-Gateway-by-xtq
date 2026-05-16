@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.api.public.proxy import router as public_router
 from app.api.public.feedback import router as public_feedback_router
 from app.api.public.news import router as public_news_router
+from app.api.public.hub import router as public_hub_router
 from app.api.v1.news_admin import router as news_admin_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.feedback import router as feedback_router
@@ -20,6 +21,8 @@ from app.api.v1.usage import router as usage_router
 from app.api.v1.digest import router as digest_router
 from app.api.v1.user_digest import router as user_digest_router
 from app.api.v1.battle import router as battle_router
+from app.api.v1.hub_admin import router as hub_admin_router
+from app.api.v1.worldcup import router as worldcup_router
 from app.core.config import settings
 from app.middleware.cors import setup_cors
 from app.services.proxy_service import proxy_service
@@ -258,6 +261,8 @@ app.include_router(news_admin_router, prefix="/api/v1")
 app.include_router(digest_router, prefix="/api/v1")
 app.include_router(user_digest_router, prefix="/api/v1")
 app.include_router(battle_router, prefix="/api/v1")
+app.include_router(hub_admin_router, prefix="/api/v1")
+app.include_router(worldcup_router, prefix="/api/v1")
 
 # Public OpenAI-compatible API (for end-users, API Key auth)
 app.include_router(public_router, prefix="/v1")
@@ -265,6 +270,7 @@ app.include_router(public_router, prefix="/v1")
 # Public feedback wall (no auth)
 app.include_router(public_feedback_router, prefix="/api/v1/public")
 app.include_router(public_news_router, prefix="/api/v1/public")
+app.include_router(public_hub_router, prefix="/api/v1/public")
 
 
 @app.get("/health")

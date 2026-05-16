@@ -120,4 +120,9 @@ export const api = {
   getBattleHistory: (limit = 20, offset = 0) =>
     request(`/battle/history?limit=${limit}&offset=${offset}`),
   getBattleDetail: (id: string) => request(`/battle/history/${id}`),
+
+  // Hub content (admin)
+  adminGetHubContent: () => request('/admin/hub/content'),
+  adminUpdateHubContent: (key: string, data: { title?: string; content?: string }) =>
+    request(`/admin/hub/content/${key}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
